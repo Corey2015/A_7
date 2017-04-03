@@ -1,0 +1,2 @@
+fingerprint.default.so   system/lib64/hw
+libfingerprint_core.so   system/lib64
