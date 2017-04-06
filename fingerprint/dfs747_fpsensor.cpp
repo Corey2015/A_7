@@ -100,7 +100,11 @@ extern int fps_search_detect_window(const int      fd,
                          uint16_t       *extra_cds_offset,
                          uint8_t        *row_scan_begin,
                          uint8_t        *row_scan_end,
-                         double         *win_dev);
+// Patrick 2017-04-05
+#if 1
+                         double         *win_avg,
+#endif
+                         double         *win_var);
 extern int fps_search_cds_offset( const int      fd,
                            const uint8_t  detect_th,
                            const uint16_t upper,
@@ -546,8 +550,6 @@ int setup_calibrate_regs(int32_t dev_fd,dfs_calibration_t dfs_cal)
 int calibrate_detect(int32_t dev_fd,dfs_calibration_t *dfs_cal)
 {
   int            status           = 0;
-  //char           key              = 0;
-  //char           line[CHAR_CNT];
   char           *arg             = NULL;
   int            user_input       = 0;
   uint16_t       det_frame        = 2;
@@ -556,13 +558,24 @@ int calibrate_detect(int32_t dev_fd,dfs_calibration_t *dfs_cal)
   uint8_t        addr[4];
   uint8_t        data[4];
   int            mode_old         = 0;
-  double         win_dev          = 0.0;
+// Patrick 2017-04-05
+#if 1
+  double         win_avg          = 0.0;
+#endif
+  double         win_var          = 0.0;
   uint8_t        row_begin        = (DFS747_SENSOR_ROWS / 2) - 4;
   uint8_t        row_end          = (DFS747_SENSOR_ROWS / 2) + 3;
   uint8_t        col_begin        = (DFS747_SENSOR_COLS / 2) - 4;
   uint8_t        col_end          = (DFS747_SENSOR_COLS / 2) + 3;
   uint32_t       det_size         = 8;
+
+// Patrick 2017-04-01
+#if 0
   uint16_t       cds_offset       = DFS747_MAX_CDS_OFFSET;
+#else
+  uint16_t       cds_offset       = DFS747_MAX_CDS_OFFSET / 2;
+#endif
+
   uint8_t        detect_th        = DFS747_MAX_DETECT_TH;
   double         sleep_us         = 0.0;
   struct timeval start_time;
@@ -581,24 +594,26 @@ int calibrate_detect(int32_t dev_fd,dfs_calibration_t *dfs_cal)
   int            detect_th_check  = 1;
   int            cds_offset_check = 1;
   int            retry_cnt        = 0;
-// Patrick 2017-03-31
-#if 1
   int            retry_limit      = 6;
+// Patrick 2017-04-01
+#if 1
+  double         sleep_mul        = 1.5;
 #endif
-
+// Patrick 2017-04-05
+#if 1
+  uint16_t       cds_offset_add   = 0;
+#endif
 
   ALOGD("Detect Calibrating...\n");
 
   // Disable all interrupts
   status = fps_single_write(dev_fd, DFS747_REG_INT_CTL, 0x00);
-
   if (status < 0) {
       goto calibrate_detect3_error;
   }
 
   // Set Detect Mode PGA gain
   status = fps_single_write(dev_fd, DFS747_REG_DET_PGA1_CTL, 0x02);
-
   if (status < 0) {
       goto calibrate_detect3_error;
   }
@@ -611,43 +626,48 @@ int calibrate_detect(int32_t dev_fd,dfs_calibration_t *dfs_cal)
   data[1] = (uint8_t) ((det_frame & 0x00FF) >> 0);
 
   status = fps_multiple_write(dev_fd, addr, data, 2);
-
   if (status < 0) {
       goto calibrate_detect3_error;
   }
 
   det_size = (col_end - col_begin + 1) * (row_end - row_begin + 1);
 
+// Patrick 2017-04-01
+#if 0
   sleep_us = (double) ((det_size * (1 + det_frame)) * 8) * 4;
   if (sleep_us < 20.0 * MSEC) {
       sleep_us = 20.0 * MSEC;
   }
+#else
+  sleep_us = (double) ((det_size * (1 + det_frame)) * 8) * 4 * sleep_mul;
+#endif
 
   // Start time measurement
   status = gettimeofday(&start_time, NULL);
-
   if (status < 0) {
       goto calibrate_detect3_error;
   }
 
-// Patrick 2017-03-31
-#if 0
   // Switch to image mode to search the best detect window
-  status = fps_switch_mode(dev_fd, DFS747_IMAGE_MODE, &mode_old);
-#else
   status = fps_switch_mode(dev_fd, DFS747_POWER_DOWN_MODE, &mode_old);
   status = fps_switch_mode(dev_fd, DFS747_IMAGE_MODE, NULL);
-#endif
-
   if (status < 0) {
       goto calibrate_detect3_error;
   }
 
+// Patrick 2017-04-05
+#if 0
   // Search the best detect window
   status = fps_search_detect_window(dev_fd, col_begin, col_end,
                                     repeat_times, &extra_cds_offset,
-                                    &row_begin, &row_end, &win_dev);
-
+                                    &row_begin, &row_end, &win_var);
+#else
+  // Search the best detect window
+  status = fps_search_detect_window(dev_fd, col_begin, col_end,
+                                    repeat_times, &extra_cds_offset,
+                                    &row_begin, &row_end,
+                                    &win_avg, &win_var);
+#endif
   if (status < 0) {
       goto calibrate_detect3_error;
   }
@@ -669,15 +689,14 @@ int calibrate_detect(int32_t dev_fd,dfs_calibration_t *dfs_cal)
       goto calibrate_detect3_error;
   }
 
-// Patrick 2017-03-31
-#if 1
 calibrate_detect3_search_detect_th_retry:
 
+// Patrick 2017-04-01
+#if 0
   status = fps_single_read(dev_fd, DFS747_REG_PWR_CTL_0, &data[0]);
   data[0] |= DFS747_PWRDWN_FPS;
   status = fps_single_write(dev_fd, DFS747_REG_PWR_CTL_0, data[0]);
 
-//usleep(100.0 * MSEC);
   usleep(1000.0 * MSEC);
 
   status = fps_single_read(dev_fd, DFS747_REG_PWR_CTL_0, &data[0]);
@@ -685,35 +704,27 @@ calibrate_detect3_search_detect_th_retry:
   status = fps_single_write(dev_fd, DFS747_REG_PWR_CTL_0, data[0]);
 #endif
 
-// Patrick 2017-03-31
-#if 0
   // Switch to detect mode
-  status = fps_switch_mode(dev_fd, DFS747_DETECT_MODE, NULL);
-#else
   status = fps_switch_mode(dev_fd, DFS747_POWER_DOWN_MODE, NULL);
   status = fps_switch_mode(dev_fd, DFS747_DETECT_MODE, NULL);
-#endif
-
   if (status < 0) {
       goto calibrate_detect3_error;
   }
 
-// Patrick 2017-03-31
-#if 1
   detect_th  = DFS747_MAX_DETECT_TH;
-#endif
+
+// Patrick 2017-04-01
+#if 0
   cds_offset = DFS747_MAX_CDS_OFFSET;
+#else
+  cds_offset = DFS747_MAX_CDS_OFFSET / 2;
+#endif
 
   // Skip first scan
   status = fps_scan_detect_event(dev_fd, detect_th, cds_offset, sleep_us, int_enable, 1);
   if (status < 0) {
       goto calibrate_detect3_error;
   }
-
-// Patrick 2017-03-31
-#if 0
-calibrate_detect3_search_detect_th_retry:
-#endif
 
   // Search Detect Th.
   status = fps_search_detect_threshold(dev_fd, cds_offset,
@@ -740,16 +751,17 @@ calibrate_detect3_search_detect_th_retry:
                   score_1st--;
               } else {
                   ALOGD("%s(): No more settings!\n", __func__);
-// Patrick 2017-03-31
-#if 0
-                  cal_success = 0;
-#endif
                   break;
               }
           }
       }
 
+// Patrick 2017-04-01
+#if 0
       too_insensitive = (score_1st <= (scan_limit - 3));
+#else
+      too_insensitive = (score_1st <= (scan_limit - 2));
+#endif
       ALOGD("%s(): A1. Score = %0d (%s)\n", __func__, score_1st, (too_insensitive ? "Insensitive" : "OK"));
 
       // A2. we check if the threshold is too low
@@ -766,20 +778,19 @@ calibrate_detect3_search_detect_th_retry:
                   score_2nd--;
               } else {
                   ALOGD("%s(): No more settings!\n", __func__);
-// Patrick 2017-03-31
-#if 0
-                  cal_success = 0;
-#endif
                   break;
               }
           }
       }
 
+// Patrick 2017-04-01
+#if 0
       too_sensitive = (score_2nd <= (scan_limit - 3));
+#else
+      too_sensitive = (score_2nd <= (scan_limit - 2));
+#endif
       ALOGD("%s(): A2. Score = %0d (%s)\n", __func__, score_2nd, (too_sensitive ? "Sensitive" : "OK"));
 
-// Patrick 2017-03-31
-#if 1
       if ((too_insensitive > 0) || (too_sensitive > 0)) {
           if (retry_cnt == retry_limit) {
               ALOGD("%s(): Enough! Stop...\n", __func__);
@@ -789,12 +800,40 @@ calibrate_detect3_search_detect_th_retry:
           retry_cnt++;
           goto calibrate_detect3_search_detect_th_retry;
       }
-#endif
   }
-// Patrick 2017-03-31
+
+calibrate_detect3_search_cds_offset_retry:
+
+// Patrick 2017-04-01
+#if 1
+  status = fps_single_read(dev_fd, DFS747_REG_PWR_CTL_0, &data[0]);
+  data[0] |= DFS747_PWRDWN_FPS;
+  status = fps_single_write(dev_fd, DFS747_REG_PWR_CTL_0, data[0]);
+  usleep(1000 * MSEC);
+
+  status = fps_single_read(dev_fd, DFS747_REG_PWR_CTL_0, &data[0]);
+  data[0] &= ~DFS747_PWRDWN_FPS;
+  status = fps_single_write(dev_fd, DFS747_REG_PWR_CTL_0, data[0]);
+  usleep(50 * MSEC);
+#endif
+
+  // Search CDS Offset
+  status = fps_search_cds_offset(dev_fd, detect_th,
+    	     DFS747_MAX_CDS_OFFSET,DFS747_MIN_CDS_OFFSET,
+                                 sleep_us, scan_limit, int_enable,
+                                 &cds_offset);
+  if (status < 0) {
+      goto calibrate_detect3_error;
+  }
+  ALOGD("%s(): Detect Th. = 0x%02X, CDS Offset = 0x%03X\n", __func__, detect_th, cds_offset);
+
+// Patrick 2017-04-01
 #if 0
-  if ((too_insensitive > 0) || (too_sensitive > 0)) {
-      if (retry_cnt == 3) {
+  if (cds_offset >= 0x160) {
+#else
+  if (cds_offset >= 0x100) {
+#endif
+      if (retry_cnt == retry_limit) {
           ALOGD("%s(): Enough! Stop...\n", __func__);
           goto calibrate_detect3_error;
       }
@@ -802,159 +841,131 @@ calibrate_detect3_search_detect_th_retry:
       retry_cnt++;
       goto calibrate_detect3_search_detect_th_retry;
   }
-#endif
-  calibrate_detect3_search_cds_offset_retry:
 
-              // Search CDS Offset
-              status = fps_search_cds_offset(dev_fd, detect_th,
-					     DFS747_MAX_CDS_OFFSET,DFS747_MIN_CDS_OFFSET,	
-                                             sleep_us, scan_limit, int_enable,
-                                             &cds_offset);
-              if (status < 0) {
-                  goto calibrate_detect3_error;
+  if (cds_offset_check > 0) {
+      // B1. we check if the threshold is too high
+      score_1st = scan_limit;
+      for (scan_cnt = 0; scan_cnt < scan_limit; scan_cnt++) {
+          status = fps_scan_detect_event(dev_fd, detect_th, (cds_offset - extra_cds_offset),
+                                         sleep_us, int_enable, 1);
+
+          // Finger-on is still NOT detected, decr. CDS offset
+          if (status == 0) {
+              if (cds_offset != DFS747_MIN_CDS_OFFSET) {
+                  ALOGD("%s(): cds_offset--!\n", __func__);
+                  cds_offset--;
+                  score_1st--;
+              } else {
+                  ALOGD("%s(): No more settings!\n", __func__);
+                  break;
               }
-              ALOGD("%s(): Detect Th. = 0x%02X, CDS Offset = 0x%03X\n", __func__, detect_th, cds_offset);
+          }
+      }
 
-// Patrick 2017-03-31
-#if 1
-              if (cds_offset >= 0x160) {
-                  if (retry_cnt == retry_limit) {
-                      ALOGD("%s(): Enough! Stop...\n", __func__);
-                      goto calibrate_detect3_error;
-                  }
-                  ALOGD("%s(): Weird! Try again...\n", __func__);
-                  retry_cnt++;
-                  goto calibrate_detect3_search_detect_th_retry;
+      too_insensitive = (score_1st <= (scan_limit - 3));
+      ALOGD("%s(): B1. Score = %0d (%s)\n", __func__, score_1st, (too_insensitive ? "Insensitive" : "OK"));
+
+      // B2. we check if the threshold is too low
+      score_2nd = scan_limit;
+      for (scan_cnt = 0; scan_cnt < scan_limit; scan_cnt++) {
+          status = fps_scan_detect_event(dev_fd, detect_th, (cds_offset + extra_cds_offset),
+                                         sleep_us, int_enable, 1);
+
+          // Finger-on is still detected, incr. CDS offset
+          if (status > 0) {
+              if (cds_offset != DFS747_MAX_CDS_OFFSET) {
+                  ALOGD("%s(): cds_offset++!\n", __func__);
+                  cds_offset++;
+                  score_2nd--;
+              } else {
+                  ALOGD("%s(): No more settings!\n", __func__);
+                  break;
               }
-#endif
+          }
+      }
 
-              if (cds_offset_check > 0) {
-                  // B1. we check if the threshold is too high
-                  score_1st = scan_limit;
-                  for (scan_cnt = 0; scan_cnt < scan_limit; scan_cnt++) {
-                      status = fps_scan_detect_event(dev_fd, detect_th, (cds_offset - extra_cds_offset),
-                                                     sleep_us, int_enable, 1);
+      too_sensitive = (score_2nd <= (scan_limit - 3));
+      ALOGD("%s(): B2. Score = %0d (%s)\n", __func__, score_2nd, (too_sensitive ? "Sensitive" : "OK"));
 
-                      // Finger-on is still NOT detected, decr. CDS offset
-                      if (status == 0) {
-                          if (cds_offset != DFS747_MIN_CDS_OFFSET) {
-                              ALOGD("%s(): cds_offset--!\n", __func__);
-                              cds_offset--;
-                              score_1st--;
-                          } else {
-                              ALOGD("%s(): No more settings!\n", __func__);
-// Patrick 2017-03-31
+// Patrick 2017-04-05
 #if 0
-                              cal_success = 0;
-#endif
-                              break;
-                          }
-                      }
-                  }
-
-                  too_insensitive = (score_1st <= (scan_limit - 3));
-                  ALOGD("%s(): B1. Score = %0d (%s)\n", __func__, score_1st, (too_insensitive ? "Insensitive" : "OK"));
-
-                  // B2. we check if the threshold is too low
-                  score_2nd = scan_limit;
-                  for (scan_cnt = 0; scan_cnt < scan_limit; scan_cnt++) {
-                      status = fps_scan_detect_event(dev_fd, detect_th, (cds_offset + extra_cds_offset),
-                                                     sleep_us, int_enable, 1);
-
-                      // Finger-on is still detected, incr. CDS offset
-                      if (status > 0) {
-                          if (cds_offset != DFS747_MAX_CDS_OFFSET) {
-                              ALOGD("%s(): cds_offset++!\n", __func__);
-                              cds_offset++;
-                              score_2nd--;
-                          } else {
-                              ALOGD("%s(): No more settings!\n", __func__);
-// Patrick 2017-03-31
-#if 0
-                              cal_success = 0;
-#endif
-                              break;
-                          }
-                      }
-                  }
-
-                  too_sensitive = (score_2nd <= (scan_limit - 3));
-                  ALOGD("%s(): B2. Score = %0d (%s)\n", __func__, score_2nd, (too_sensitive ? "Sensitive" : "OK"));
-
-// Patrick 2017-03-31
-#if 1
-                  if ((too_insensitive > 0) || (too_sensitive > 0)) {
-                      if (retry_cnt == 3) {
-                          ALOGD("%s(): Enough! Stop...\n", __func__);
-                          goto calibrate_detect3_error;
-                      }
-                      ALOGD("%s(): Weird! Try again...\n", __func__);
-                      retry_cnt++;
-                      goto calibrate_detect3_search_detect_th_retry;
-                  }
-#endif
-              }
-
-// Patrick 2017-03-31
-#if 0
-              if ((too_insensitive > 0) || (too_sensitive > 0)) {
-                  if (retry_cnt == 3) {
-                      ALOGD("%s(): Enough! Stop...\n", __func__);
-                      goto calibrate_detect3_error;
-                  }
-                  ALOGD("%s(): Weird! Try again...\n", __func__);
-                  retry_cnt++;
-                  goto calibrate_detect3_search_cds_offset_retry;
-              }
-#endif
-
-              // Add some offset to avoid false trigger
-              cds_offset += 3;
-              if (cds_offset > DFS747_MAX_CDS_OFFSET) {
-                  cds_offset = DFS747_MAX_CDS_OFFSET;
-              }
-
-              // Fill the result to the registers
-              addr[0] = DFS747_REG_DET_CDS_CTL_0;
-              addr[1] = DFS747_REG_DET_CDS_CTL_1;
-              addr[2] = DFS747_REG_V_DET_SEL;
-
-              status = fps_multiple_read(dev_fd, addr, data, 3);
-              if (status < 0) {
-                  goto calibrate_detect3_error;
-              }
-
-              data[0] = (data[0] & 0x7F) | ((uint8_t) ((cds_offset & 0x0100) >> 1));
-              data[1] = (uint8_t) (cds_offset & 0x00FF);
-              data[2] = detect_th;
-
-              status = fps_multiple_write(dev_fd, addr, data, 3);
-              if (status < 0) {
-                  goto calibrate_detect3_error;
-              }
-
-// Patrick 2017-03-31
-#if 0
-              // Switch back to original mode
-              status = fps_switch_mode(dev_fd, mode_old, &mode_old);
+      if ((too_insensitive > 0) || (too_sensitive > 0)) {
 #else
-              status = fps_switch_mode(dev_fd, DFS747_POWER_DOWN_MODE, NULL);
-              status = fps_switch_mode(dev_fd, mode_old, NULL);
+      if ((too_insensitive > 0) && (too_sensitive > 0)) {
 #endif
-              if (status < 0) {
-                  goto calibrate_detect3_error;
-              }
+          if (retry_cnt == 3) {
+              ALOGD("%s(): Enough! Stop...\n", __func__);
+              goto calibrate_detect3_error;
+          }
+          ALOGD("%s(): Weird! Try again...\n", __func__);
+          retry_cnt++;
 
-              // Stop time measurement
-              status = gettimeofday(&stop_time, NULL);
-              if (status < 0) {
-                  goto calibrate_detect3_error;
-              }
+// Patrick 2017-04-01
+#if 0
+          goto calibrate_detect3_search_detect_th_retry;
+#else
+          goto calibrate_detect3_search_cds_offset_retry;
+#endif
+      }
+  }
 
-              elapsed = get_elapsed_ms(&start_time, &stop_time);
-              if (elapsed < 0) {
-                  goto calibrate_detect3_error;
-              }
+// Patrick 2017-04-05
+#if 0
+  // Add some offset to avoid false trigger
+  cds_offset += 3;
+  if (cds_offset > DFS747_MAX_CDS_OFFSET) {
+      cds_offset = DFS747_MAX_CDS_OFFSET;
+  }
+#else
+  // Add some offset to avoid false trigger
+  cds_offset_add = (uint16_t) ((win_avg - 30.0) / 10.0 );
+  cds_offset_add -= 1;
+  ALOGD("cds_offset_add = %d",cds_offset_add);
+  cds_offset += cds_offset_add;
+  if (cds_offset > DFS747_MAX_CDS_OFFSET) {
+      cds_offset = DFS747_MAX_CDS_OFFSET;
+  }
+#endif
+
+  // Fill the result to the registers
+  addr[0] = DFS747_REG_DET_CDS_CTL_0;
+  addr[1] = DFS747_REG_DET_CDS_CTL_1;
+  addr[2] = DFS747_REG_V_DET_SEL;
+
+  status = fps_multiple_read(dev_fd, addr, data, 3);
+  if (status < 0) {
+      goto calibrate_detect3_error;
+  }
+
+  data[0] = (data[0] & 0x7F) | ((uint8_t) ((cds_offset & 0x0100) >> 1));
+  data[1] = (uint8_t) (cds_offset & 0x00FF);
+  data[2] = detect_th;
+
+  status = fps_multiple_write(dev_fd, addr, data, 3);
+  if (status < 0) {
+      goto calibrate_detect3_error;
+  }
+
+// Patrick 2017-04-01
+#if 0
+  // Switch back to original mode
+  status = fps_switch_mode(dev_fd, DFS747_POWER_DOWN_MODE, NULL);
+  status = fps_switch_mode(dev_fd, mode_old, NULL);
+  if (status < 0) {
+      goto calibrate_detect3_error;
+  }
+#endif
+
+  // Stop time measurement
+  status = gettimeofday(&stop_time, NULL);
+  if (status < 0) {
+      goto calibrate_detect3_error;
+  }
+
+  elapsed = get_elapsed_ms(&start_time, &stop_time);
+  if (elapsed < 0) {
+      goto calibrate_detect3_error;
+  }
 
   if (cal_success > 0) {
       ALOGD("    Done!\n");
@@ -981,13 +992,12 @@ calibrate_detect3_search_detect_th_retry:
   }
   return status;
 
-  calibrate_detect3_error :
+calibrate_detect3_error :
 
+  ALOGD("Calibrate detect Failed!\n");
 
-      ALOGD("Calibrate detect Failed!\n");
-
-      status = -1;
-      return status;
+  status = -1;
+  return status;
 }
 
 int calibrate_image(int32_t dev_fd,dfs_calibration_t *dfs_cal)
@@ -1992,7 +2002,7 @@ int32_t dfs747_captureImage(fingerprint_data_t* device)
     int avgValue =0;
     int scoreValue = 0;
     int img_qlty = 0;
-    //add by corey for getimage 
+    //add by corey for getimage
     int errorInt = 0;
     struct tm *time_ptr;
     char      line[CHAR_CNT];
@@ -2009,7 +2019,7 @@ int32_t dfs747_captureImage(fingerprint_data_t* device)
     get_image(device,tac_handle->pRaw_imgbuf);
     fp_finger_detection(tac_handle, &avgValue, &scoreValue);
     ALOGD("getimage scoreValue = %d" ,scoreValue);
-    if (scoreValue >10 && scoreValue <65) {
+    if (scoreValue >10 && scoreValue <60) {
       errorInt = 1;
       memset(line,0,CHAR_CNT);
       time_ptr = localtime(&ts_start.tv_sec);
@@ -2029,7 +2039,7 @@ int32_t dfs747_captureImage(fingerprint_data_t* device)
         ALOGD("Save file failed!");
       }
     }
-    if(scoreValue > 65){
+    if(scoreValue > 60){
         //可使用图像
 		//add by corey for save image 2016/11/25
 		//memset(&tv, 0, sizeof(timeval));
@@ -2433,7 +2443,7 @@ int fpsensor_load_user_db(fingerprint_data_t* device, const char* path, uint32_t
 		ALOGD("read %s success,do setup calibration",tac_handle->user_tpl_storage_path);
       //retval = setup_calibrate_regs(device->sysfs_fd,tac_handle->dfs_cal);
       retval = calibrate_image(device->sysfs_fd,&tac_handle->dfs_cal);
-     
+
       for (i = 0 ;i<5;i++){
       retval = calibrate_detect(device->sysfs_fd,&tac_handle->dfs_cal);
       ALOGD("calibrate_detect retval = %d",retval);

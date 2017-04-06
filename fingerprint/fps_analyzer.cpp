@@ -353,11 +353,8 @@ int fps_get_one_image(const int      fd,
   int      status = 0;
   uint32_t img_size;
   uint8_t  tx[6];
-// Patrick 2017-03-31 
-#if 1
   int      r;
   int      c;
-#endif
 
   if (img == NULL) {
       return -1;
@@ -386,8 +383,6 @@ int fps_get_one_image(const int      fd,
       return status;
   }
 
-// Patrick 2017-03-31
-#if 1
   for (c = 0; c < img_width; c++) {
       img[(DFS747_SENSOR_ROWS - 1) * img_width + c] = img[(DFS747_SENSOR_ROWS - 3) * img_width + c];
       img[(DFS747_SENSOR_ROWS - 2) * img_width + c] = img[(DFS747_SENSOR_ROWS - 3) * img_width + c];
@@ -397,7 +392,6 @@ int fps_get_one_image(const int      fd,
       img[r * img_width + 0] = img[r * img_width + 2];
       img[r * img_width + 1] = img[r * img_width + 2];
   }
-#endif
 
   return status;
 }
@@ -440,20 +434,13 @@ int fps_switch_mode(const int fd,
   if (mode_old != NULL) {
       if (data[2] & DFS747_ENABLE_DETECT) {
           *mode_old = DFS747_DETECT_MODE;
-// Patrick 2017-03-31
-#if 0
-      } else if (data[1] == DFS747_PWRDWN_ALL) {
-#else
       } else if (data[1] == (DFS747_PWRDWN_ALL & ~DFS747_PWRDWN_BGR)) {
-#endif
           *mode_old = DFS747_POWER_DOWN_MODE;
       } else {
           *mode_old = DFS747_IMAGE_MODE;
       }
   }
 
-  #if defined(__DFS747A__)
-  
   switch (mode_new) {
       case DFS747_IMAGE_MODE : {
           data[0] &= ~DFS747_PWRDWN_OVT;
@@ -469,42 +456,13 @@ int fps_switch_mode(const int fd,
 
       case DFS747_POWER_DOWN_MODE : {
           data[0] |= DFS747_PWRDWN_OVT;
-// Patrick 2017-03-31
-#if 0
-          data[1]  = DFS747_PWRDWN_ALL;
-#else
           data[1]  = DFS747_PWRDWN_ALL & ~DFS747_PWRDWN_BGR;
-#endif
           data[2] &= ~DFS747_ENABLE_DETECT;
           break;
       }
 
       default : return -1;
   }
-  #elif defined(__DFS747B__)
-  switch (mode_new) {
-      case DFS747_IMAGE_MODE : {
-          data[0] &= ~DFS747_PWRDWN_OVT;
-          data[1]  = (DFS747_PWRDWN_DET | DFS747_PWRDWN_OSC);
-          data[2] &= ~(DFS747_ENABLE_DETECT | DFS747_ENABLE_PWRDWN);
-          break;
-      }
-
-      case DFS747_DETECT_MODE : {
-          data[2] |= (DFS747_ENABLE_DETECT | DFS747_ENABLE_PWRDWN);
-          break;
-      }
-
-      case DFS747_POWER_DOWN_MODE : {
-          data[0] |= DFS747_PWRDWN_OVT;
-          data[1]  = DFS747_PWRDWN_ALL & ~DFS747_PWRDWN_BGR;
-          data[2] &= ~(DFS747_ENABLE_DETECT | DFS747_ENABLE_PWRDWN);
-          break;
-      }
-
-      default : return -1;
-  }
-  #endif
 
   status = fps_multiple_write(fd, addr, data, sizeof(addr));
   if (status < 0) {
@@ -513,22 +471,18 @@ int fps_switch_mode(const int fd,
 
   usleep(SWITCH_MODE_DELAY_US);
 
-// Patrick 2017-03-31
-  #if 0
-  if (mode_new == DFS747_DETECT_MODE) {
-      status = fps_single_write(fd, DFS747_REG_TEST_ANA, 0x03);
-  } else {
-      status = fps_single_write(fd, DFS747_REG_TEST_ANA, 0x00);
-  }
-  #endif
+// Patrick 2017-04-01
+#if 1
+  switch (mode_new) {
+      case DFS747_IMAGE_MODE :
+          status = fps_single_write(fd, DFS747_REG_TEST_ANA, 0x00);
+          break;
 
-// Patrick 2017-03-31
-  #if 0
-  status = fps_single_write(fd, DFS747_REG_CPR_CTL, 0x04);
-  usleep(SWITCH_MODE_DELAY_US);
-  status = fps_single_write(fd, DFS747_REG_CPR_CTL, 0x0F);
-  usleep(SWITCH_MODE_DELAY_US);
-  #endif
+      case DFS747_DETECT_MODE :
+          status = fps_single_write(fd, DFS747_REG_TEST_ANA, 0x03);
+          break;
+  }
+#endif
 
   return status;
 }
@@ -536,9 +490,7 @@ int fps_switch_mode(const int fd,
 int fps_enable_tgen(const int fd,
                 const int enable)
 {
-  int status = 0;
-
-#if defined(__DFS747A__)
+  int     status = 0;
   uint8_t addr;
   uint8_t data;
 
@@ -557,7 +509,6 @@ int fps_enable_tgen(const int fd,
   }
 
   status = fps_single_write(fd, addr, data);
-#endif
 
   return status;
 }
@@ -599,21 +550,6 @@ int fps_scan_detect_event(const int      dev_fd,
   uint8_t        data[4];
   struct pollfd  poll_fps;
 
-#if defined(__DFS747B__)
-  // Switch clock domain to SPI clock
-  status = fps_single_read(dev_fd, DFS747_REG_GBL_CTL, &data[0]);
-  if (status < 0) {
-      return status;
-  }
-
-  data[0] &= ~DFS747_ENABLE_DETECT;
-
-  status = fps_single_write(dev_fd, DFS747_REG_GBL_CTL, data[0]);
-  if (status < 0) {
-      return status;
-  }
-#endif
-
   // Disable and clear interrupts
   addr[0] = DFS747_REG_INT_CTL;
   addr[1] = DFS747_REG_INT_EVENT;
@@ -625,21 +561,6 @@ int fps_scan_detect_event(const int      dev_fd,
   if (status < 0) {
       return status;
   }
-
-#if defined(__DFS747B__)
-  // Switch back to internal oscillator clock domain
-  status = fps_single_read(dev_fd, DFS747_REG_GBL_CTL, &data[0]);
-  if (status < 0) {
-      return status;
-  }
-
-  data[0] |= DFS747_ENABLE_DETECT;
-
-  status = fps_single_write(dev_fd, DFS747_REG_GBL_CTL, data[0]);
-  if (status < 0) {
-      return status;
-  }
-#endif
 
   if (cal_detect > 0) {
       // Set up Detect Threshold and CDS offset
@@ -678,10 +599,9 @@ int fps_scan_detect_event(const int      dev_fd,
               ALOGD("%s(): Calling poll() failed! status = %0d\n", __func__, status);
               return -1;
           }
-      }else
-	
-
-      ALOGD("%s(): poll_fps.revents = %0d\n", __func__, poll_fps.revents);
+      } else {
+          ALOGD("%s(): poll_fps.revents = %0d\n", __func__, poll_fps.revents);
+      }
 
       if (poll_fps.revents != 0) {
           status = fps_single_read(dev_fd, DFS747_REG_INT_EVENT, &event);
@@ -781,14 +701,16 @@ fps_search_detect_threshold(const int      fd,
 
 }
 
-int fps_search_detect_window(const int      fd,
+int
+fps_search_detect_window(const int      fd,
                          const uint8_t  col_scan_begin,
                          const uint8_t  col_scan_end,
                          const uint32_t repeat_times,
                          uint16_t       *extra_cds_offset,
                          uint8_t        *row_scan_begin,
                          uint8_t        *row_scan_end,
-                         double         *win_dev)
+                         double         *win_avg,
+                         double         *win_var)
 {
   int      status        = 0;
   uint8_t  **raw_buf     = NULL;
@@ -802,12 +724,12 @@ int fps_search_detect_window(const int      fd,
   double   pix_sum       = 0.0;
   double   sqr_sum       = 0.0;
   double   avg           = 0.0;
-  double   dev           = 0.0;
+  double   var           = 0.0;
   uint32_t col_scan_cnt  = 0;
   uint32_t row_scan_cnt  = 0;
   uint32_t win_scan_cnt  = 0;
-  double   *all_wins_dev = NULL;
   double   *all_wins_avg = NULL;
+  double   *all_wins_var = NULL;
   uint8_t  pga_gain      = 0;
   int      t;
   int      f;
@@ -820,7 +742,13 @@ int fps_search_detect_window(const int      fd,
 
   col_scan_cnt = col_scan_end - col_scan_begin + 1;
   row_scan_cnt = col_scan_cnt;
+
+// Patrick 2017-04-01
+#if 0
   win_scan_cnt = img_height - 2 - col_scan_cnt + 1;
+#else
+  win_scan_cnt = img_height - 16 - col_scan_cnt + 1;
+#endif
 
   // NOTE: Assume the sensor is in Image Mode before this call...
 
@@ -865,15 +793,15 @@ int fps_search_detect_window(const int      fd,
       goto fps_search_detect_window_error;
   }
 
-  all_wins_dev = (double *) malloc(sizeof(double) * win_scan_cnt);
-  if (all_wins_dev == NULL) {
+  all_wins_var = (double *) malloc(sizeof(double) * win_scan_cnt);
+  if (all_wins_var == NULL) {
       status = -1;
       goto fps_search_detect_window_error;
   }
 
   for (w = 0; w < win_scan_cnt; w++) {
       all_wins_avg[w] = 0.0;
-      all_wins_dev[w] = 0.0;
+      all_wins_var[w] = 0.0;
   }
 
   for (t = 0; t < repeat_times; t++) {
@@ -923,7 +851,12 @@ int fps_search_detect_window(const int      fd,
       //    goto fps_search_detect_window_error;
       //}
 
+// Patrick 2017-04-01
+#if 0
       for (rb = 1; rb < (1 + win_scan_cnt); rb++) {
+#else
+      for (rb = 9; rb < (9 + win_scan_cnt); rb++) {
+#endif
           pix_sum = 0.0;
           sqr_sum = 0.0;
           for (r = rb; r < (rb + row_scan_cnt); r++) {
@@ -935,33 +868,71 @@ int fps_search_detect_window(const int      fd,
           }
 
           avg =  pix_sum / (row_scan_cnt * col_scan_cnt);
-          dev = (sqr_sum / (row_scan_cnt * col_scan_cnt)) - (avg * avg);
+          var = (sqr_sum / (row_scan_cnt * col_scan_cnt)) - (avg * avg);
 
-          ALOGD("%s(): Row (Begin/End) = %0d/%0d, Deviation = %0.3f\n",
-                __func__, rb, (rb + row_scan_cnt - 1), dev);
+// Patrick 2017-04-05
+#if 0
+          ALOGD("%s(): Row (Begin/End) = %0d/%0d, Avg = %0.3f, Var. = %0.3f\n",
+                __func__, rb, (rb + row_scan_cnt - 1), avg, var);
+#endif
 
-          if (dev > all_wins_dev[rb - 1]) {
-              all_wins_dev[rb - 1] = dev;
+// Patrick 2017-04-01
+#if 0
+          if (dev > all_wins_var[rb - 1]) {
+              all_wins_var[rb - 1] = dev;
               all_wins_avg[rb - 1] = avg;
           }
+#else
+          if (var > all_wins_var[rb - 9]) {
+              all_wins_var[rb - 9] = var;
+              all_wins_avg[rb - 9] = avg;
+          }
+#endif
       }
   }
 
+
+// Patrick 2017-04-01
+#if 0
   for (rb = 1; rb < (1 + win_scan_cnt); rb++) {
-      ALOGD("%s(): Row (Begin/End) %0d/%0d, Avg. = %0.3f, Dev. = %0.3f\n",
+      ALOGD("%s(): Row (Begin/End) %0d/%0d, Avg. = %0.3f, Var. = %0.3f\n",
             __func__, rb, (rb + row_scan_cnt - 1),
-            all_wins_avg[rb - 1], all_wins_dev[rb - 1]);
+            all_wins_avg[rb - 1], all_wins_var[rb - 1]);
   }
 
   *row_scan_begin = 1;
   *row_scan_end   = 1 + row_scan_cnt - 1;
-  *win_dev        = all_wins_dev[0];
+  *win_var        = all_wins_var[0];
+#else
+  for (rb = 9; rb < (9 + win_scan_cnt); rb++) {
+      ALOGD("%s(): Row (Begin/End) %0d/%0d, Avg. = %0.3f, Var. = %0.3f\n",
+            __func__, rb, (rb + row_scan_cnt - 1),
+            all_wins_avg[rb - 9], all_wins_var[rb - 9]);
+  }
+
+  *row_scan_begin = 9;
+  *row_scan_end   = 9 + row_scan_cnt - 1;
+  // Patrick 2017-04-05
+  #if 1
+  *win_avg        = all_wins_avg[0];
+  #endif
+  *win_var        = all_wins_var[0];
+#endif
 
   for (w = 1; w < win_scan_cnt; w++) {
-      if ((all_wins_dev[w] < *win_dev) && (*win_dev != 0)) {
+// Patrick 2017-04-01
+#if 0
+      if ((all_wins_var[w] < *win_var) && (*win_var != 0)) {
+#else
+      if ((all_wins_var[w] > *win_var) && (*win_var != 0)) {
+#endif
           *row_scan_begin = w + 1;
           *row_scan_end   = w + 1 + row_scan_cnt - 1;
-          *win_dev        = all_wins_dev[w];
+// Patrick 2017-04-05
+#if 1
+          *win_avg        = all_wins_avg[w];
+#endif
+          *win_var        = all_wins_var[w];
       }
   }
 
@@ -971,23 +942,20 @@ int fps_search_detect_window(const int      fd,
       goto fps_search_detect_window_error;
   }
 
-  *extra_cds_offset = (int) (sqrt(*win_dev)                               *  // ADC code deviation
-                             4                                            /  // 4 sigmas
+  *extra_cds_offset = (int) (sqrt(*win_var)                               *  // ADC code deviation
+                             1                                            /  // 4 sigmas
                              256 * 3.3 * 1000                             /  // ADC code -> mV
-#if 0
-                             DFS747_PGA_GAIN_1_SETTING_TO_VALUE(pga_gain) /  // Signal deviation from CDS out in mV
-#endif
                              2 + 0.5);                                       // 2mV CDS offset per step
   ALOGD("%s(): extra_cds_offset = 0x%03X\n", __func__, *extra_cds_offset);
 
-  if (*win_dev >= 10.0) {
+  if (*win_var >= 10.0) {
       ALOGD("%s(): Too bad to search a good detect window!\n", __func__);
       status = -1;
       goto fps_search_detect_window_error;
   }
 
-  ALOGD("%s(): Sel. Row (Begin/End) = %0d/%0d, Dev. = %0.3f, Extra CDS Offset = 0x%03X\n",
-        __func__, *row_scan_begin, *row_scan_end, *win_dev, *extra_cds_offset);
+  ALOGD("%s(): Sel. Row (Begin/End) = %0d/%0d, Avg. = %0.3f, Var. = %0.3f, Extra CDS Offset = 0x%03X\n",
+        __func__, *row_scan_begin, *row_scan_end, *win_avg, *win_var, *extra_cds_offset);
 
 fps_search_detect_window_error:
 
@@ -1001,7 +969,7 @@ fps_search_detect_window_error:
   }
   if (raw_buf)      free(raw_buf);
   if (img_buf)      free(img_buf);
-  if (all_wins_dev) free(all_wins_dev);
+  if (all_wins_var) free(all_wins_var);
   if (all_wins_avg) free(all_wins_avg);
 
   return status;
@@ -1086,9 +1054,6 @@ fps_search_cds_offset(const int      fd,
   return status;
 }
 
-
-
-
 int init_sensor(int dev_fd)
 {
     int     status = 0;
@@ -1105,10 +1070,17 @@ int init_sensor(int dev_fd)
     if (status < 0) {
         return status;
     }
+
     // Reset sensor
     status = fps_reset_sensor(dev_fd, 0);
     usleep(20 * MSEC);
     status = fps_reset_sensor(dev_fd, 1);
+
+// Patrick 2017-04-01
+#if 1
+    // Add a dummy write
+    status = fps_single_write(dev_fd, DFS747_REG_INT_CTL, 0x00);
+#endif
 
     // Disable and clear interrupts
     addr[0] = DFS747_REG_INT_CTL;
@@ -1134,14 +1106,11 @@ int init_sensor(int dev_fd)
     }
     usleep(10 * MSEC);
 
-// Patrick 2017-03-31
-#if 1
     status = fps_single_write(dev_fd, DFS747_REG_CPR_CTL, 0x08);
     if (status < 0) {
         return status;
     }
     usleep(10 * MSEC);
-#endif
 
     status = fps_single_write(dev_fd, DFS747_REG_CPR_CTL, 0x04);
 
@@ -1183,13 +1152,6 @@ int init_sensor(int dev_fd)
     ALOGD("init Done");
     return status;
 }
-
-
-
-
-
-
-
 
 int
 reset_sensor(int dev_fd)
