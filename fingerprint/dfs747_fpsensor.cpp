@@ -42,6 +42,9 @@
 
 #define IMG_DATA_OFFSET 0x20
 
+//--------DEBUG--------
+#define DEBUG_FP
+
 extern fp_core_t fp_core;
 extern int init_sensor(int dev_fd);
 extern int fps_multiple_read(const int     fd,
@@ -1753,6 +1756,26 @@ int get_image(fingerprint_data_t* device, uint8_t *enh_img)
                 }
             }
 
+            // Save finger image
+            //sprintf(file, "%s", "/data/system/users/0/fpdata/dolfa/before.bmp");
+            #ifdef DEBUG_FP
+            //fpsensor_save_bitmap("data/system/users/0/fpdata/dolfa/before.bmp", fng_img,DFS747_SENSOR_ROWS,DFS747_SENSOR_COLS);
+            //post processing
+            #endif
+
+            for(i = 0 ; i < img_width; i++){
+              fng_img[0 * img_width + i] =  fng_img[2 * img_width + i];
+              fng_img[1 * img_width + i] =  fng_img[2 * img_width + i];
+            }
+
+            for(i = 0 ; i < img_height; i++){
+              fng_img[i * img_width + 0] =  fng_img[i * img_width + 2];
+              fng_img[i * img_width + 1] =  fng_img[i * img_width + 2];
+            }
+
+            #ifdef DEBUG_FP
+            //fpsensor_save_bitmap("data/system/users/0/fpdata/dolfa/after.bmp", fng_img,DFS747_SENSOR_ROWS,DFS747_SENSOR_COLS);
+            #endif
             // Calculate dynamic range
             fng_dr = fng_avg - bkg_avg;
 
@@ -2361,7 +2384,7 @@ int32_t dfs747_detect_finger(fingerprint_data_t* device)
 	if(retval == FINGER_DETECT_AGAIN)
 	{
 		again_count++;
-		if(again_count > 1) {
+		if(again_count > 3) {
             ALOGD("finger lost");
 		    again_count = 0;
 			retval = FINGER_DETECT_LOST;

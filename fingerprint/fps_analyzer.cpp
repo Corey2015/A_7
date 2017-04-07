@@ -382,17 +382,27 @@ int fps_get_one_image(const int      fd,
       ALOGD("%s(): Calling ioctl() failed! status = %0d\n", __func__, status);
       return status;
   }
+  #if 0
+    save_bmp("/data/system/users/0/fpdata/dolfa/before.bmp",img,img_size);
 
   for (c = 0; c < img_width; c++) {
       img[(DFS747_SENSOR_ROWS - 1) * img_width + c] = img[(DFS747_SENSOR_ROWS - 3) * img_width + c];
       img[(DFS747_SENSOR_ROWS - 2) * img_width + c] = img[(DFS747_SENSOR_ROWS - 3) * img_width + c];
   }
 
+
+  for (c = 0; c < img_width; c++) {
+      img[c] = img[img_width + c];
+      //img[img_width + c] = img[2 * img_width + c];
+  }
+
+  save_bmp("/data/system/users/0/fpdata/dolfa/after.bmp",img,img_size);
+
   for (r = 0; r < img_height; r++) {
       img[r * img_width + 0] = img[r * img_width + 2];
       img[r * img_width + 1] = img[r * img_width + 2];
   }
-
+#endif
   return status;
 }
 
