@@ -92,7 +92,12 @@ save_bmp(const char     *path,
 {
     uint8_t file_header[] = {
         0x42, 0x4D,              // 'B' 'M'
+// Patrick 2017-04-09
+#if 0
         0x36, 0x28, 0x00, 0x00,  // File size in bytes
+#else
+        0x36, 0x04, 0x00, 0x00,  // File size in bytes
+#endif
         0x00, 0x00,              // Reserved
         0x00, 0x00,              // Reserved
         0x36, 0x04, 0x00, 0x00,  // Image offset in bytes
@@ -108,7 +113,12 @@ save_bmp(const char     *path,
         0x00, 0x00, 0x00, 0x00,  // Compression
         0xE5, 0x4C, 0x00, 0x00,  // X resolution
         0xE5, 0x4C, 0x00, 0x00,  // Y resolution
+// Patrick 2017-04-09
+#if 0
         0x00, 0x00, 0x00, 0x00,  // Number of colors
+#else
+        0x00, 0x01, 0x00, 0x00,  // Number of colors
+#endif
         0x00, 0x00, 0x00, 0x00   // Important colors
     };
 
@@ -124,7 +134,12 @@ save_bmp(const char     *path,
         color_table[(i * 4) + 3] = 0x00;
     }
 
+// Patrick 2017-04-09
+#if 0
     fp = fopen(path, "w");
+#else
+    fp = fopen(path, "wb");
+#endif
     if (fp == NULL) {
         return -1;
     }
@@ -382,27 +397,20 @@ int fps_get_one_image(const int      fd,
       ALOGD("%s(): Calling ioctl() failed! status = %0d\n", __func__, status);
       return status;
   }
-  #if 0
-    save_bmp("/data/system/users/0/fpdata/dolfa/before.bmp",img,img_size);
 
+// Patrick 2017-04-07
+#if 0
   for (c = 0; c < img_width; c++) {
       img[(DFS747_SENSOR_ROWS - 1) * img_width + c] = img[(DFS747_SENSOR_ROWS - 3) * img_width + c];
       img[(DFS747_SENSOR_ROWS - 2) * img_width + c] = img[(DFS747_SENSOR_ROWS - 3) * img_width + c];
   }
-
-
-  for (c = 0; c < img_width; c++) {
-      img[c] = img[img_width + c];
-      //img[img_width + c] = img[2 * img_width + c];
-  }
-
-  save_bmp("/data/system/users/0/fpdata/dolfa/after.bmp",img,img_size);
 
   for (r = 0; r < img_height; r++) {
       img[r * img_width + 0] = img[r * img_width + 2];
       img[r * img_width + 1] = img[r * img_width + 2];
   }
 #endif
+
   return status;
 }
 
@@ -481,8 +489,8 @@ int fps_switch_mode(const int fd,
 
   usleep(SWITCH_MODE_DELAY_US);
 
-// Patrick 2017-04-01
-#if 1
+// Patrick 2017-04-07
+#if 0
   switch (mode_new) {
       case DFS747_IMAGE_MODE :
           status = fps_single_write(fd, DFS747_REG_TEST_ANA, 0x00);
@@ -660,9 +668,17 @@ fps_search_detect_threshold(const int      fd,
   uint8_t  det_lower;
   uint32_t scan_cnt;
 
+// Patrick 2017-04-09
+#if 0
   det_upper  = upper;
   det_middle = (upper + lower) / 2;
   det_lower  = lower;
+#else
+  det_upper  = upper;
+  det_lower  = lower;
+  det_middle = ((det_upper + det_lower) / 2) +
+               ((det_upper + det_lower) % 2);
+#endif
 
   while ((det_upper - det_lower) > 1) {
       ALOGD("%s(): Detect Threshold range = 0x%02X : 0x%02X : 0x%02X\n", __func__,
@@ -689,7 +705,13 @@ fps_search_detect_threshold(const int      fd,
           det_lower = det_middle;
       }
 
+// Patrick 2017-04-09
+#if 0
       det_middle = (det_upper + det_lower) / 2;
+#else
+      det_middle = ((det_upper + det_lower) / 2) +
+                   ((det_upper + det_lower) % 2);
+#endif
   }
 
   *detect_th = det_upper;
@@ -752,13 +774,7 @@ fps_search_detect_window(const int      fd,
 
   col_scan_cnt = col_scan_end - col_scan_begin + 1;
   row_scan_cnt = col_scan_cnt;
-
-// Patrick 2017-04-01
-#if 0
-  win_scan_cnt = img_height - 2 - col_scan_cnt + 1;
-#else
   win_scan_cnt = img_height - 16 - col_scan_cnt + 1;
-#endif
 
   // NOTE: Assume the sensor is in Image Mode before this call...
 
@@ -855,18 +871,7 @@ fps_search_detect_window(const int      fd,
           avg_img[p] = (uint8_t) (pix_sum / avg_frame);
       }
 
-      //sprintf(file, "detect_search.bmp");
-      //status = save_bmp(file, avg_img, img_size);
-      //if (status < 0) {
-      //    goto fps_search_detect_window_error;
-      //}
-
-// Patrick 2017-04-01
-#if 0
-      for (rb = 1; rb < (1 + win_scan_cnt); rb++) {
-#else
       for (rb = 9; rb < (9 + win_scan_cnt); rb++) {
-#endif
           pix_sum = 0.0;
           sqr_sum = 0.0;
           for (r = rb; r < (rb + row_scan_cnt); r++) {
@@ -880,40 +885,13 @@ fps_search_detect_window(const int      fd,
           avg =  pix_sum / (row_scan_cnt * col_scan_cnt);
           var = (sqr_sum / (row_scan_cnt * col_scan_cnt)) - (avg * avg);
 
-// Patrick 2017-04-05
-#if 0
-          ALOGD("%s(): Row (Begin/End) = %0d/%0d, Avg = %0.3f, Var. = %0.3f\n",
-                __func__, rb, (rb + row_scan_cnt - 1), avg, var);
-#endif
-
-// Patrick 2017-04-01
-#if 0
-          if (dev > all_wins_var[rb - 1]) {
-              all_wins_var[rb - 1] = dev;
-              all_wins_avg[rb - 1] = avg;
-          }
-#else
           if (var > all_wins_var[rb - 9]) {
               all_wins_var[rb - 9] = var;
               all_wins_avg[rb - 9] = avg;
           }
-#endif
       }
   }
 
-
-// Patrick 2017-04-01
-#if 0
-  for (rb = 1; rb < (1 + win_scan_cnt); rb++) {
-      ALOGD("%s(): Row (Begin/End) %0d/%0d, Avg. = %0.3f, Var. = %0.3f\n",
-            __func__, rb, (rb + row_scan_cnt - 1),
-            all_wins_avg[rb - 1], all_wins_var[rb - 1]);
-  }
-
-  *row_scan_begin = 1;
-  *row_scan_end   = 1 + row_scan_cnt - 1;
-  *win_var        = all_wins_var[0];
-#else
   for (rb = 9; rb < (9 + win_scan_cnt); rb++) {
       ALOGD("%s(): Row (Begin/End) %0d/%0d, Avg. = %0.3f, Var. = %0.3f\n",
             __func__, rb, (rb + row_scan_cnt - 1),
@@ -922,35 +900,36 @@ fps_search_detect_window(const int      fd,
 
   *row_scan_begin = 9;
   *row_scan_end   = 9 + row_scan_cnt - 1;
-  // Patrick 2017-04-05
-  #if 1
   *win_avg        = all_wins_avg[0];
-  #endif
   *win_var        = all_wins_var[0];
-#endif
 
   for (w = 1; w < win_scan_cnt; w++) {
-// Patrick 2017-04-01
+// Patrick 2017-04-09
 #if 0
-      if ((all_wins_var[w] < *win_var) && (*win_var != 0)) {
-#else
       if ((all_wins_var[w] > *win_var) && (*win_var != 0)) {
-#endif
           *row_scan_begin = w + 1;
           *row_scan_end   = w + 1 + row_scan_cnt - 1;
-// Patrick 2017-04-05
-#if 1
           *win_avg        = all_wins_avg[w];
-#endif
           *win_var        = all_wins_var[w];
       }
+#else
+      if ((all_wins_var[w] < *win_var) && (*win_var != 0)) {
+          *row_scan_begin = w + 9;
+          *row_scan_end   = w + 9 + row_scan_cnt - 1;
+          *win_avg        = all_wins_avg[w];
+          *win_var        = all_wins_var[w];
+      }
+#endif
   }
 
+// Patrick 2017-04-07
+#if 0
   status = fps_single_read(fd, DFS747_REG_IMG_PGA1_CTL, &pga_gain);
   if (status < 0) {
       status = -1;
       goto fps_search_detect_window_error;
   }
+#endif
 
   *extra_cds_offset = (int) (sqrt(*win_var)                               *  // ADC code deviation
                              1                                            /  // 4 sigmas
@@ -1003,9 +982,17 @@ fps_search_cds_offset(const int      fd,
   uint8_t  addr[2];
   uint8_t  data[2];
 
+// Patrick 2017-04-09
+#if 0
   cds_upper  = upper;
   cds_middle = (upper + lower) / 2;
   cds_lower  = lower;
+#else
+  cds_upper  = upper;
+  cds_lower  = lower;
+  cds_middle = ((cds_upper + cds_lower) / 2) +
+               ((cds_upper + cds_lower) % 2);
+#endif
 
   while ((cds_upper - cds_lower) > 1) {
       ALOGD("%s(): CDS Offset range = 0x%03X : 0x%03X : 0x%03X\n", __func__,
@@ -1015,10 +1002,18 @@ fps_search_cds_offset(const int      fd,
       for (scan_cnt = 0; scan_cnt < scan_limit; scan_cnt++) {
           status = fps_scan_detect_event(fd, detect_th, cds_middle, sleep_us, int_enable, 0);
 
+// Patrick 2017-04-09
+#if 0
           // Finger-on detected
           if (status > 0) {
               break;
           }
+#else
+          // Finger-on is NOT detected
+          if (status == 0) {
+              break;
+          }
+#endif
 
           // Error
           if (status < 0) {
@@ -1026,13 +1021,28 @@ fps_search_cds_offset(const int      fd,
           }
       }
 
+// Patrick 2017-04-09
+#if 0
       if (scan_cnt == scan_limit) {
           cds_upper = cds_middle;
       } else {
           cds_lower = cds_middle;
       }
+#else
+      if (scan_cnt == scan_limit) {
+          cds_lower = cds_middle;
+      } else {
+          cds_upper = cds_middle;
+      }
+#endif
 
+// Patrick 2017-04-09
+#if 0
       cds_middle = (cds_upper + cds_lower) / 2;
+#else
+      cds_middle = ((cds_upper + cds_lower) / 2) +
+                   ((cds_upper + cds_lower) % 2);
+#endif
   }
 
   *cds_offset = cds_upper;
@@ -1086,11 +1096,8 @@ int init_sensor(int dev_fd)
     usleep(20 * MSEC);
     status = fps_reset_sensor(dev_fd, 1);
 
-// Patrick 2017-04-01
-#if 1
     // Add a dummy write
     status = fps_single_write(dev_fd, DFS747_REG_INT_CTL, 0x00);
-#endif
 
     // Disable and clear interrupts
     addr[0] = DFS747_REG_INT_CTL;
