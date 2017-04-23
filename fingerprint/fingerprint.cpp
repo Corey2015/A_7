@@ -44,6 +44,8 @@
 #define TEMPLATE_PATH                		"/data/system/users"
 
 
+
+static int fingerprint_do_remove(fingerprint_device_t *device,uint32_t gid, uint32_t fid);
 int32_t dfs747_device_init(fingerprint_data_t *device);
 static int fingerprint_cmd(fingerprint_data_t *fpData,fingerprintQueue *queue,fingerprint_cmdID_t cmdId);
 
@@ -413,6 +415,7 @@ static int fingerprint_authenticate(struct fingerprint_device *device,
         return NO_ERROR;
     }
 
+
 err:
     free(node);
 	node = NULL;
@@ -428,6 +431,8 @@ static int fingerprint_remove(struct fingerprint_device __unused *dev,
     fingerprint_data_t *fpData  = (fingerprint_data_t *)dev;
 
     fingerprint_cmd_t *node = (fingerprint_cmd_t *)malloc(sizeof(fingerprint_cmd_t));
+
+
     if (NULL == node) {
         ALOGE("%s: No memory for fingerprint_cmd_t", __func__);
         return -ENOMEM;
@@ -438,14 +443,19 @@ static int fingerprint_remove(struct fingerprint_device __unused *dev,
     node->len = gid;
     node->data= (uint64_t)fid;
     if (fpData->cmd_queue->enqueue((void *)node) == true) {
-        fingerprint_sem_post(&fpData->cmd_sem);
-        return NO_ERROR;
+            fingerprint_sem_post(&fpData->cmd_sem);
+	    //ALOGD("Cancel called by corey");	
+	    //fingerprint_cancel(dev);
+            return NO_ERROR;
     } else {
         free(node);
 		node = NULL;
         return FINGERPRINT_ERROR;
     }
-    return FINGERPRINT_ERROR;
+    //return FINGERPRINT_ERROR;
+    //modified by corey
+
+    return 0;
 }
 
 
@@ -565,23 +575,29 @@ static int fingerprint_do_remove(fingerprint_device_t *device,uint32_t gid, uint
         goto out;
     }
 
-
     for (uint32_t i = 1; i <= MAX_NBR_TEMPLATES; i++) {
-
-        if (fid == 0 || fid == i) {
+	
+       // if (fid == 0 || fid == i) {
+	if (fid == 0 || fid == i) {
             if (fpData->delete_template(fpData->tac_handle, i)) {
                 status = -EIO;
                 goto out;
             }
 			ALOGD("notify removed fid=%d gid=%d", fid, fpData->current_gid);
+			
 			msg.type = FINGERPRINT_TEMPLATE_REMOVED;
-			msg.data.removed.finger.fid = fid;
+			msg.data.removed.finger.fid = i;
 			msg.data.removed.finger.gid = fpData->current_gid;
 			device->notify(&msg);
+			if(fid != 0 ){			
+			ALOGD("Cancel called by corey");	
+	    		fingerprint_cancel(device);
+			}
             found = 1;
         }
     }
-
+    ALOGD("Cancel called by corey");	
+    fingerprint_cancel(device);
     if (!found && fid != 0) {
         // Fingerprint not found in the database, notify it was already removed by sending
         // FINGERPRINT_TEMPLATE_REMOVED.
@@ -593,6 +609,8 @@ static int fingerprint_do_remove(fingerprint_device_t *device,uint32_t gid, uint
             device->notify(&msg);
         }
     }
+    //add by corey
+    //return 0;
 
 out:
     if (status) {
@@ -608,6 +626,8 @@ out:
 int fingerprint_enroll_init(fingerprint_data_t *fpData, const hw_auth_token_t *hat, uint32_t  gid,uint32_t  timeout_sec) 
 {
     fingerprint_device_t *device = (fingerprint_device_t *)fpData;
+  
+
     fingerprint_msg_t msg;
     int ret = 0;
     int status = 0;
@@ -935,7 +955,9 @@ int fingerprint_do_enroll(fingerprint_data_t *fpData)
     fingerprint_msg_t msg;
     int ret = 0;
     int progress = 0;
-
+    //add by corey 0421
+    //tac_handle->enrolling == true;
+    //
     if(fpData->enroll_remaining == 0)
     {
         ALOGD("Enrol canceled,goto detect");
@@ -962,7 +984,8 @@ int fingerprint_do_enroll(fingerprint_data_t *fpData)
      if (fpData->enroll_remaining == 0) {
 
             ret = fpData->store_template_db(fpData->tac_handle);
-            fpData->end_enroll(fpData->tac_handle);
+            //modified by corey 0421
+	    //fpData->end_enroll(fpData->tac_handle);
             if (ret) {
 				msg.type = FINGERPRINT_ERROR;
 				msg.data.error=FINGERPRINT_ERROR_NO_SPACE;
@@ -1059,6 +1082,7 @@ int fingerprint_do_verify(fingerprint_device_t *device)
 
         if (identify_data.result == 2) {
             fpData->update_pending = true;
+	    fpData->store_template_db(fpData->tac_handle);
         }
 
     } else {
@@ -1120,6 +1144,7 @@ int fingerprint_handle_poll_result(fingerprint_data_t *fpData,uint32_t timeout)
     }else if(timeout > 0) {//timeout
         gettimeofday(&tv, NULL);
         //for enrol timeout
+	
         if(fpData->finger_state == FINGERPRINT_STATE_ENROLLING){
             timersub(&fpData->enrol_timeout, &tv, &ts_delta);
             delta_us = TIME_IN_US(ts_delta);
@@ -1131,7 +1156,7 @@ int fingerprint_handle_poll_result(fingerprint_data_t *fpData,uint32_t timeout)
                 ALOGD("enrol timeout!at poll");
             }
         }
-
+	
         //for autosuspend
         if(fpData->finger_press_state != FINGERPRINT_IDLE) {
             timersub(&fpData->idle_timeout, &tv, &ts_delta);
@@ -1199,7 +1224,8 @@ static void* poll_thread(void *data)
         }
 
         poll_val = -1;
-        rc = poll(&pfd, 1, timeout);
+       // rc = poll(&pfd, 1, timeout);
+	rc = poll(&pfd, 1, -1);
         if (!rc) {
             poll_val=timeout;
         } else if (rc < 0) {
@@ -1551,14 +1577,32 @@ void *cmd_thread(void *data)
             ALOGD("cmd_thread:handle FINGERPRINT_CMD_CANCEL");
 	     if(fpData->finger_state == FINGERPRINT_STATE_ENROLLING)
 	     {
-				fingerprint_msg_t msg;
+				ALOGD("cmd_thread:handle FINGERPRINT_CMD_CANCELENROLL");
+				fpData->finger_state = FINGERPRINT_STATE_LISTENING;
+				/*fingerprint_msg_t msg;
 				msg.type = FINGERPRINT_ERROR;
 				msg.data.error=FINGERPRINT_ERROR_CANCELED;
+				device->notify(&msg);
+				*/
 				fingerprint_end_enroll(fpData,&msg);
 	     }else  if(fpData->finger_state == FINGERPRINT_STATE_VERIFYING) {
 	            ALOGD("cmd_thread:handle FINGERPRINT_CMD_CANCELVERIFY");
 	            fpData->finger_state = FINGERPRINT_STATE_LISTENING;
-				//(void) fpData->end_verify(fpData->tac_handle);
+		    //add by corey 
+                    fingerprint_msg_t msg;
+		    msg.type = FINGERPRINT_ERROR;
+		    msg.data.error=FINGERPRINT_ERROR_CANCELED;
+		    device->notify(&msg);
+		    //end
+	            //(void) fpData->end_verify(fpData->tac_handle);
+		}else{
+		    //add by corey 
+		    fpData->finger_state = FINGERPRINT_STATE_IDLE;
+                    fingerprint_msg_t msg;
+		    msg.type = FINGERPRINT_ERROR;
+		    msg.data.error=FINGERPRINT_ERROR_CANCELED;
+		    device->notify(&msg);
+		    //end
 		}
             break;
 

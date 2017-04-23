@@ -329,9 +329,13 @@ int fps_multiple_write(const int     fd,
     if ((addr == NULL) || (data == NULL)) {
         return -1;
     }
-
+#if 0
     tx = (uint8_t *) malloc(len * 2);
-    if (tx == NULL) {
+#else
+    tx = (uint8_t *) malloc((len+1) * 2);
+#endif 
+  
+ if (tx == NULL) {
         ALOGD("%s(): malloc() failed!\n", __func__);
         goto fps_multiple_write_end;
     }
@@ -340,9 +344,15 @@ int fps_multiple_write(const int     fd,
         tx[(i * 2) + 0] = addr[i];
         tx[(i * 2) + 1] = data[i];
     }
-
+#if 1
+    tx[(len*2) +0] = 0xFF;
+    tx[(len*2) +1] = 0xFF;
+#endif 
      tr.tx_buf = (unsigned long) tx;
+#if 0
      tr.len    = (len * 2);
+#endif
+    tr.len = ((len +1) *2);
      tr.opcode = DFS747_IOC_REGISTER_MASS_WRITE,
 
     status = ioctl(fd, DFS747_IOC_MESSAGE(1), &tr);
@@ -432,6 +442,81 @@ int fps_switch_mode(const int fd,
                 const int mode_new,
                 int       *mode_old)
 {
+ int     status = 0;
+    uint8_t addr[3];
+    uint8_t data[3];
+
+    addr[0] = DFS747_REG_MISC_PWR_CTL_1;
+    addr[1] = DFS747_REG_PWR_CTL_0;
+    addr[2] = DFS747_REG_GBL_CTL;
+
+    data[0] = 0x00;
+    data[1] = 0x00;
+    data[2] = 0x00;
+
+    status = fps_multiple_read(fd, addr, data, sizeof(addr));
+    if (status < 0) {
+        return status;
+    }
+
+    if (mode_old != NULL) {
+        if (data[2] & DFS747_ENABLE_DETECT) {
+            *mode_old = DFS747_DETECT_MODE;
+        } else if (data[1] == DFS747_PWRDWN_ALL) {
+            *mode_old = DFS747_POWER_DOWN_MODE;
+        } else {
+            *mode_old = DFS747_IMAGE_MODE;
+        }
+    }
+
+    if (mode_new != DFS747_POWER_DOWN_MODE) {
+        status = fps_single_write(fd, DFS747_REG_CPR_CTL, 0x00);
+        usleep(SWITCH_MODE_DELAY_US);
+        status = fps_single_write(fd, DFS747_REG_CPR_CTL, 0x08);
+        usleep(SWITCH_MODE_DELAY_US);
+        status = fps_single_write(fd, DFS747_REG_CPR_CTL, 0x04);
+        usleep(SWITCH_MODE_DELAY_US);
+        status = fps_single_write(fd, DFS747_REG_CPR_CTL, 0x0F);
+        usleep(SWITCH_MODE_DELAY_US);
+    }
+	
+    switch (mode_new) {
+        case DFS747_IMAGE_MODE : {
+            data[0] &= ~DFS747_PWRDWN_OVT;
+            data[1]  = (DFS747_PWRDWN_DET | DFS747_PWRDWN_OSC);
+            data[2] &= ~DFS747_ENABLE_DETECT;
+            break;
+        }
+
+        case DFS747_DETECT_MODE : {
+            data[2] |= DFS747_ENABLE_DETECT;
+            break;
+        }
+
+        case DFS747_POWER_DOWN_MODE : {
+            data[0] |= DFS747_PWRDWN_OVT;
+            data[1]  = DFS747_PWRDWN_ALL;
+            data[2] &= ~DFS747_ENABLE_DETECT;
+            break;
+        }
+
+        default : return -1;
+    }
+
+    status = fps_multiple_write(fd, addr, data, sizeof(addr));
+    if (status < 0) {
+        return status;
+    }
+
+    usleep(SWITCH_MODE_DELAY_US);
+
+    if (mode_new == DFS747_POWER_DOWN_MODE) {
+        status = fps_single_write(fd, DFS747_REG_CPR_CTL, 0x00);
+        usleep(SWITCH_MODE_DELAY_US);
+    }
+
+    return status;
+/*
   int     status = 0;
   uint8_t addr[3];
   uint8_t data[3];
@@ -503,6 +588,7 @@ int fps_switch_mode(const int fd,
 #endif
 
   return status;
+*/
 }
 
 int fps_enable_tgen(const int fd,
@@ -580,6 +666,18 @@ int fps_scan_detect_event(const int      dev_fd,
       return status;
   }
 
+  //double clean
+  addr[0] = DFS747_REG_INT_CTL;
+  addr[1] = DFS747_REG_INT_EVENT;
+
+  data[0] = 0x00;
+  data[1] = 0x00;
+
+  status = fps_multiple_write(dev_fd, addr, data, 2);
+  if (status < 0) {
+      return status;
+  }
+
   if (cal_detect > 0) {
       // Set up Detect Threshold and CDS offset
       addr[0] = DFS747_REG_DET_CDS_CTL_1;
@@ -645,6 +743,12 @@ int fps_scan_detect_event(const int      dev_fd,
   }
 
   status = fps_single_write(dev_fd, DFS747_REG_INT_EVENT, 0x00);
+  if (status < 0) {
+      return status;
+  }
+
+  //double clean
+    status = fps_single_write(dev_fd, DFS747_REG_INT_EVENT, 0x00);
   if (status < 0) {
       return status;
   }
@@ -733,6 +837,12 @@ fps_search_detect_threshold(const int      fd,
 
 }
 
+// Patrick 2017-04-12
+#if 1
+#define DFS747_SEARCH_SKIP_ROWS (32)
+#define DFS747_SEARCH_ROW_START ((DFS747_SEARCH_SKIP_ROWS  / 2) + 1)
+#endif
+
 int
 fps_search_detect_window(const int      fd,
                          const uint8_t  col_scan_begin,
@@ -774,7 +884,12 @@ fps_search_detect_window(const int      fd,
 
   col_scan_cnt = col_scan_end - col_scan_begin + 1;
   row_scan_cnt = col_scan_cnt;
+// Patrick 2017-04-12
+#if 0
   win_scan_cnt = img_height - 16 - col_scan_cnt + 1;
+#else
+  win_scan_cnt = img_height - col_scan_cnt + 1 - DFS747_SEARCH_SKIP_ROWS;
+#endif
 
   // NOTE: Assume the sensor is in Image Mode before this call...
 
@@ -837,7 +952,11 @@ fps_search_detect_window(const int      fd,
           if (status < 0) {
               goto fps_search_detect_window_error;
           }
-
+	  //double clean
+          status = fps_single_write(fd, DFS747_REG_INT_EVENT, 0x00);
+          if (status < 0) {
+              goto fps_search_detect_window_error;
+          }
           // Turn on TGEN
           status = fps_enable_tgen(fd, 1);
           if (status < 0) {
@@ -871,7 +990,12 @@ fps_search_detect_window(const int      fd,
           avg_img[p] = (uint8_t) (pix_sum / avg_frame);
       }
 
+// Patrick 2017-04-12
+#if 0
       for (rb = 9; rb < (9 + win_scan_cnt); rb++) {
+#else
+      for (rb = DFS747_SEARCH_ROW_START; rb < (DFS747_SEARCH_ROW_START + win_scan_cnt); rb++) {
+#endif
           pix_sum = 0.0;
           sqr_sum = 0.0;
           for (r = rb; r < (rb + row_scan_cnt); r++) {
@@ -885,56 +1009,74 @@ fps_search_detect_window(const int      fd,
           avg =  pix_sum / (row_scan_cnt * col_scan_cnt);
           var = (sqr_sum / (row_scan_cnt * col_scan_cnt)) - (avg * avg);
 
+// Patrick 2017-04-12
+#if 0
           if (var > all_wins_var[rb - 9]) {
               all_wins_var[rb - 9] = var;
               all_wins_avg[rb - 9] = avg;
           }
+#else
+          if (var > all_wins_var[rb - DFS747_SEARCH_ROW_START]) {
+              all_wins_var[rb - DFS747_SEARCH_ROW_START] = var;
+              all_wins_avg[rb - DFS747_SEARCH_ROW_START] = avg;
+          }
+#endif
       }
   }
 
+// Patrick 2017-04-12
+#if 0
   for (rb = 9; rb < (9 + win_scan_cnt); rb++) {
       ALOGD("%s(): Row (Begin/End) %0d/%0d, Avg. = %0.3f, Var. = %0.3f\n",
             __func__, rb, (rb + row_scan_cnt - 1),
             all_wins_avg[rb - 9], all_wins_var[rb - 9]);
   }
+#else
+  for (rb = DFS747_SEARCH_ROW_START; rb < (DFS747_SEARCH_ROW_START + win_scan_cnt); rb++) {
+      ALOGD("%s(): Row (Begin/End) %0d/%0d, Avg. = %0.3f, Var. = %0.3f\n",
+            __func__, rb, (rb + row_scan_cnt - 1),
+            all_wins_avg[rb - DFS747_SEARCH_ROW_START], all_wins_var[rb - DFS747_SEARCH_ROW_START]);
+  }
+#endif
 
+// Patrick 2017-04-12
+#if 0
   *row_scan_begin = 9;
   *row_scan_end   = 9 + row_scan_cnt - 1;
   *win_avg        = all_wins_avg[0];
   *win_var        = all_wins_var[0];
-
-  for (w = 1; w < win_scan_cnt; w++) {
-// Patrick 2017-04-09
-#if 0
-      if ((all_wins_var[w] > *win_var) && (*win_var != 0)) {
-          *row_scan_begin = w + 1;
-          *row_scan_end   = w + 1 + row_scan_cnt - 1;
-          *win_avg        = all_wins_avg[w];
-          *win_var        = all_wins_var[w];
-      }
 #else
+  *row_scan_begin = DFS747_SEARCH_ROW_START;
+  *row_scan_end   = DFS747_SEARCH_ROW_START + row_scan_cnt - 1;
+  *win_avg        = all_wins_avg[0];
+  *win_var        = all_wins_var[0];
+#endif
+
+// Patrick 2017-04-12
+#if 0
+  for (w = 1; w < win_scan_cnt; w++) {
       if ((all_wins_var[w] < *win_var) && (*win_var != 0)) {
           *row_scan_begin = w + 9;
           *row_scan_end   = w + 9 + row_scan_cnt - 1;
           *win_avg        = all_wins_avg[w];
           *win_var        = all_wins_var[w];
       }
-#endif
   }
-
-// Patrick 2017-04-07
-#if 0
-  status = fps_single_read(fd, DFS747_REG_IMG_PGA1_CTL, &pga_gain);
-  if (status < 0) {
-      status = -1;
-      goto fps_search_detect_window_error;
+#else
+  for (w = 1; w < win_scan_cnt; w++) {
+      if ((all_wins_var[w] < *win_var) && (*win_var != 0)) {
+          *row_scan_begin = w + DFS747_SEARCH_ROW_START;
+          *row_scan_end   = w + DFS747_SEARCH_ROW_START + row_scan_cnt - 1;
+          *win_avg        = all_wins_avg[w];
+          *win_var        = all_wins_var[w];
+      }
   }
 #endif
 
-  *extra_cds_offset = (int) (sqrt(*win_var)                               *  // ADC code deviation
-                             1                                            /  // 4 sigmas
-                             256 * 3.3 * 1000                             /  // ADC code -> mV
-                             2 + 0.5);                                       // 2mV CDS offset per step
+  *extra_cds_offset = (int) (sqrt(*win_var)   *  // ADC code deviation
+                             1                /  // 1 sigmas
+                             256 * 3.3 * 1000 /  // ADC code -> mV
+                             1.5 + 0.5);           // 2mV CDS offset per step
   ALOGD("%s(): extra_cds_offset = 0x%03X\n", __func__, *extra_cds_offset);
 
   if (*win_var >= 10.0) {
@@ -1085,7 +1227,9 @@ int init_sensor(int dev_fd)
     //memset(bkg_img, 0x00, sizeof(bkg_img));
 
     ALOGD("    Initializing sensor...\n");
-
+	
+	sleep(1);
+	ALOGD("init sleep end");
     status = fps_set_spi_speed(dev_fd, 8 * 1000 * 1000);
     if (status < 0) {
         return status;
@@ -1100,6 +1244,18 @@ int init_sensor(int dev_fd)
     status = fps_single_write(dev_fd, DFS747_REG_INT_CTL, 0x00);
 
     // Disable and clear interrupts
+    addr[0] = DFS747_REG_INT_CTL;
+    addr[1] = DFS747_REG_INT_EVENT;
+
+    data[0] = 0x00;
+    data[1] = 0x00;
+
+    status = fps_multiple_write(dev_fd, addr, data, 2);
+    if (status < 0) {
+        return status;
+    }
+
+    //double clean
     addr[0] = DFS747_REG_INT_CTL;
     addr[1] = DFS747_REG_INT_EVENT;
 
@@ -1136,7 +1292,7 @@ int init_sensor(int dev_fd)
     }
     usleep(10 * MSEC);
 
-    status = fps_single_write(dev_fd, DFS747_REG_CPR_CTL, 0x0F);
+    status = fps_single_write(dev_fd, DFS747_REG_CPR_CTL, 0x0f);
 
     if (status < 0) {
         return status;
@@ -1155,9 +1311,15 @@ int init_sensor(int dev_fd)
     addr[2] = DFS747_REG_ANA_I_SET_0;
     addr[3] = DFS747_REG_ANA_I_SET_1;
     addr[4] = DFS747_REG_SET_ANA_0;
-
+    /*
     data[0] = 0x00;
     data[1] = 0x20;
+    data[2] = 0xFC;
+    data[3] = 0x03;
+    data[4] = 0xFF;
+    */
+    data[0] = 0x08;
+    data[1] = 0x00;
     data[2] = 0xFC;
     data[3] = 0x03;
     data[4] = 0xFF;
