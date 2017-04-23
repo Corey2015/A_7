@@ -2699,7 +2699,7 @@ int32_t dfs747_detect_finger3(fingerprint_data_t *device)
 
 
     //check if is enrolling
-/*
+
     if ((tac_handle->enrolling == true)&&(isGetimaged == 0)){
 	ALOGD("enrolling FINGER_DETECT_PRESENT");
 	return FINGER_DETECT_PRESENT;
@@ -2719,7 +2719,7 @@ int32_t dfs747_detect_finger3(fingerprint_data_t *device)
 	}
 	
     }
-   */
+   /*
     if ((tac_handle->enrolling == true)){
 	get_image(device,tac_handle->pRaw_imgbuf);
     	fp_finger_detection(tac_handle, &avgValue, &imgValue);
@@ -2743,6 +2743,7 @@ int32_t dfs747_detect_finger3(fingerprint_data_t *device)
 	        }
 	    }
     }
+	*/
     //end
      // Turn off interrupt
     status = fps_single_write(device->sysfs_fd, DFS747_REG_INT_CTL, 0x00);
