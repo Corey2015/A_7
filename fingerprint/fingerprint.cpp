@@ -589,15 +589,18 @@ static int fingerprint_do_remove(fingerprint_device_t *device,uint32_t gid, uint
 			msg.data.removed.finger.fid = i;
 			msg.data.removed.finger.gid = fpData->current_gid;
 			device->notify(&msg);
-			if(fid != 0 ){			
+			/*if(fid != 0 ){			
 			ALOGD("Cancel called by corey");	
-	    		fingerprint_cancel(device);
+	    		fingerprint_cancel(device);				
 			}
+			*/
             found = 1;
         }
     }
+    
     ALOGD("Cancel called by corey");	
     fingerprint_cancel(device);
+       
     if (!found && fid != 0) {
         // Fingerprint not found in the database, notify it was already removed by sending
         // FINGERPRINT_TEMPLATE_REMOVED.

@@ -29,7 +29,7 @@
 #define MAX_DBS_FEATURE	(1024*1024)
 #define MAX_ONE_FEATURE	(7*1024+MAX_WIDTH*MAX_HEIGHT)
 
-#define SIMILARITY_VALUE 60 //large then this will treat as duplicate
+#define SIMILARITY_VALUE 70 //large then this will treat as duplicate
 #define	MATCH_SCORE_VALUE 	0.25	// 比对成功阈值 >=此值表示比对成功
 #define	UPDATE_SCORE_VALUE 	0.50	// update阈值 >=此值表示should do update
 // --------- 算法所需资源相关配置，不能修改  end ----------------------------------
@@ -47,7 +47,7 @@
 //#define DOUBLE_CHECK
 //#define FPSENSOR_ERROR_ENROLLED (1105)
 
-#define VERSION "1.0.8.170421_release"
+#define VERSION "1.0.10.170426_release"
 
 extern fp_core_t fp_core;
 extern int init_sensor(int dev_fd);
@@ -100,6 +100,7 @@ extern void find_pixel_range(const uint8_t  *img,
                  uint8_t        *pix_min,
                  uint8_t        *pix_max);
 //extern int dump_register(int dev_fd);
+#if 0
 extern int fps_search_detect_window(const int      fd,
                          const uint8_t  col_scan_begin,
                          const uint8_t  col_scan_end,
@@ -109,6 +110,17 @@ extern int fps_search_detect_window(const int      fd,
                          uint8_t        *row_scan_end,
                          double         *win_avg,
                          double         *win_var);
+#else
+extern int fps_search_detect_window(const int      fd,
+                         const uint8_t  col_scan_begin,
+                         const uint8_t  col_scan_end,
+                         const uint32_t repeat_times,
+                         double         *extra_cds_offset,
+                         uint8_t        *row_scan_begin,
+                         uint8_t        *row_scan_end,
+                         double         *win_avg,
+                         double         *win_var);
+#endif
 extern int fps_search_cds_offset( const int      fd,
                            const uint8_t  detect_th,
                            const uint16_t upper,
@@ -133,11 +145,19 @@ int fpsensor_store_template_db(void *pHandle);
 static uint16_t     det_cds_offset       = 0;
 static uint8_t      det_detect_th        = 0;
 static double       det_sleep_us         = 0.0;
+#if 0
 static uint16_t     det_extra_cds_offset = 0;
+#else
+static double       det_extra_cds_offset = 0.0;
+#endif
 static uint32_t     recal_secs           = 30;
 static uint32_t     detect_cnt           = 0;
 
+#if 0
 static uint16_t     extra_cds_offset     = 0;
+#else
+static double       extra_cds_offset     = 0.0;
+#endif
 static int          isGetimaged = 0;
 
 static double
@@ -654,7 +674,11 @@ int calibrate_detect(int32_t dev_fd,dfs_calibration_t *dfs_cal)
 #if 0
   uint16_t       cds_offset_add   = 0;
 #else
+  #if 0
   int            cds_offset_add   = 0;
+  #else
+  uint16_t       cds_offset_add   = 0;
+  #endif
   uint16_t       cds_init         = 0;
 #endif
 
@@ -1130,7 +1154,13 @@ calibrate_detect3_search_cds_offset_retry:
   // To avoid false trigger
   cds_offset += 2;
 #else
-	cds_offset += (extra_cds_offset / 4);
+  #if 0
+	cds_offset += (extra_cds_offset / 5);
+  #else
+    cds_offset_add = (uint16_t) ((extra_cds_offset / 5.5) + 0.5);
+	cds_offset += cds_offset_add;
+    ALOGD("cds_offset += %0d\n", cds_offset_add);
+  #endif
 #endif
   if (cds_offset > DFS747_MAX_CDS_OFFSET) {
       cds_offset = DFS747_MAX_CDS_OFFSET;
@@ -1892,8 +1922,9 @@ static int get_file_size(const char* path, uint32_t *size)
   return FPSENSOR_ERROR_OK;
 }
 
-int get_image(fingerprint_data_t* device, uint8_t *enh_img)
+int get_image(fingerprint_data_t* device, uint8_t *fng_img)
 {
+/*
 	int retval = FPSENSOR_ERROR_OK;
 	fpsensor_handle_internal_t* tac_handle = (fpsensor_handle_internal_t*) device->tac_handle;
     int            status     = 0;
@@ -2198,6 +2229,115 @@ image_mode_test_error :
     ALOGD("\n");
 
     return status;
+*/
+    fpsensor_handle_internal_t* tac_handle = (fpsensor_handle_internal_t*) device->tac_handle;
+
+    int     status = 0;
+    int     mode_old;
+    double  pix_sum;
+    double  bkg_avg;
+    double  fng_avg;
+    double  fng_dr;
+    uint8_t data;
+    uint8_t raw_buf[DFS747_SENSOR_SIZE + DFS747_DUMMY_PIXELS];
+    uint8_t *img_buf;
+    int     i;
+
+    // Calculate background image average
+    pix_sum = 0.0;
+    for (i = 0; i < DFS747_SENSOR_SIZE; i++) {
+        pix_sum += (double) tac_handle->dfs_cal.bkg_img[i];
+    }
+    bkg_avg = pix_sum / DFS747_SENSOR_SIZE;
+
+    // Switch to image mode
+    status = fps_switch_mode(device->sysfs_fd, DFS747_POWER_DOWN_MODE, &mode_old);
+    status = fps_switch_mode(device->sysfs_fd, DFS747_IMAGE_MODE, NULL);
+    if (status < 0) {
+        goto get_image_end;
+    }
+
+    status = fps_single_read(device->sysfs_fd, DFS747_REG_GBL_CTL, &data);
+    if (status < 0) {
+        goto get_image_end;
+    }
+
+    // Turn on TGEN
+    data |= DFS747_ENABLE_TGEN;
+    status = fps_single_write(device->sysfs_fd, DFS747_REG_GBL_CTL, data);
+    if (status < 0) {
+        goto get_image_end;
+    }
+
+    // Get a frame
+    status = fps_get_one_image(device->sysfs_fd,
+                               DFS747_SENSOR_COLS,
+                               DFS747_SENSOR_ROWS,
+                               DFS747_DUMMY_PIXELS,
+                               raw_buf);
+    if (status < 0) {
+        goto get_image_end;
+    }
+
+    img_buf = &raw_buf[DFS747_DUMMY_PIXELS];
+
+    // Turn off TGEN
+    data &= ~DFS747_ENABLE_TGEN;
+    status = fps_single_write(device->sysfs_fd, DFS747_REG_GBL_CTL, data);
+    if (status < 0) {
+        goto get_image_end;
+    }
+
+    // Calculate finger image average
+    pix_sum = 0.0;
+    for (i = 0; i < DFS747_SENSOR_SIZE; i++) {
+        pix_sum += (double) img_buf[i];
+    }
+    fng_avg = pix_sum / DFS747_SENSOR_SIZE;
+
+    // Extract fingerprint
+    for (i = 0; i < DFS747_SENSOR_SIZE; i++) {
+        if (img_buf[i] > tac_handle->dfs_cal.bkg_img[i]) {
+            fng_img[i] = 0xFF - (img_buf[i] - tac_handle->dfs_cal.bkg_img[i]);
+        } else {
+            fng_img[i] = 0xFF;
+        }
+    }
+
+    for (i = 0; i < DFS747_SENSOR_COLS; i++) {
+        fng_img[0 * DFS747_SENSOR_COLS + i] = fng_img[2 * DFS747_SENSOR_COLS + i];
+        fng_img[1 * DFS747_SENSOR_COLS + i] = fng_img[2 * DFS747_SENSOR_COLS + i];
+    }
+
+    for (i = 0; i < DFS747_SENSOR_ROWS; i++) {
+        fng_img[i * DFS747_SENSOR_COLS + 0] = fng_img[i * DFS747_SENSOR_COLS + 2];
+        fng_img[i * DFS747_SENSOR_COLS + 1] = fng_img[i * DFS747_SENSOR_COLS + 2];
+    }
+/*
+    // Switch to image mode
+    status = fps_switch_mode(device->sysfs_fd, DFS747_POWER_DOWN_MODE, NULL);
+    status = fps_switch_mode(device->sysfs_fd, mode_old, NULL);
+    if (status < 0) {
+        goto get_image_end;
+    }
+*/
+    // Clear all pending events
+    status = fps_single_write(device->sysfs_fd, DFS747_REG_INT_EVENT, 0x00);
+    if (status < 0) {
+        goto get_image_end;
+    }
+
+    // Calculate dynamic range
+    fng_dr = fng_avg - bkg_avg;
+
+    // Display DR
+    ALOGD("    Image Dynamic Range = %0.3f\n", fng_dr);
+
+get_image_end:
+
+    ALOGD("    %s!\n", (status < 0) ? "Failed" : "Done");
+    return status;
+
 }
 
 /**********************************************************************
@@ -2719,7 +2859,8 @@ int32_t dfs747_detect_finger3(fingerprint_data_t *device)
 	}
 	
     }
-   /*
+
+	/*
     if ((tac_handle->enrolling == true)){
 	get_image(device,tac_handle->pRaw_imgbuf);
     	fp_finger_detection(tac_handle, &avgValue, &imgValue);
@@ -2745,6 +2886,8 @@ int32_t dfs747_detect_finger3(fingerprint_data_t *device)
     }
 	*/
     //end
+
+
      // Turn off interrupt
     status = fps_single_write(device->sysfs_fd, DFS747_REG_INT_CTL, 0x00);
     if (status < 0) {
@@ -2784,14 +2927,35 @@ int32_t dfs747_detect_finger3(fingerprint_data_t *device)
         state = FINGER_DETECT_LOST;
     }
 
+
+
 #if 1
     if (detect_count == 0) {
-        state = FINGER_DETECT_LOST;
+	// add by corey
+	get_image(device,tac_handle->pRaw_imgbuf);
+    	fp_finger_detection(tac_handle, &avgValue, &imgValue);
+// end
+
+        if(imgValue < 60){
+            state = FINGER_DETECT_LOST;
+	}else{
+	    state = FINGER_DETECT_PRESENT;
+	}
     } else if (detect_count == MAX_DETECT_COUNT) {
         state = FINGER_DETECT_PRESENT;
         detect_count = 0;
     } else {
-        state = FINGER_DETECT_AGAIN;
+// add by corey
+	get_image(device,tac_handle->pRaw_imgbuf);
+    	fp_finger_detection(tac_handle, &avgValue, &imgValue);
+// end
+
+	if(imgValue < 60){
+            state = FINGER_DETECT_AGAIN;
+	}else{
+	    state = FINGER_DETECT_PRESENT;
+	}
+  
 
         // Turn on interrupt
         status = fps_single_write(device->sysfs_fd, DFS747_REG_INT_CTL, DFS747_DETECT_EVENT);

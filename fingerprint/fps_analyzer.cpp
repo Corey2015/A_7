@@ -843,6 +843,7 @@ fps_search_detect_threshold(const int      fd,
 #define DFS747_SEARCH_ROW_START ((DFS747_SEARCH_SKIP_ROWS  / 2) + 1)
 #endif
 
+#if 0
 int
 fps_search_detect_window(const int      fd,
                          const uint8_t  col_scan_begin,
@@ -853,6 +854,18 @@ fps_search_detect_window(const int      fd,
                          uint8_t        *row_scan_end,
                          double         *win_avg,
                          double         *win_var)
+#else
+int
+fps_search_detect_window(const int      fd,
+                         const uint8_t  col_scan_begin,
+                         const uint8_t  col_scan_end,
+                         const uint32_t repeat_times,
+                         double         *extra_cds_offset,
+                         uint8_t        *row_scan_begin,
+                         uint8_t        *row_scan_end,
+                         double         *win_avg,
+                         double         *win_var)
+#endif
 {
   int      status        = 0;
   uint8_t  **raw_buf     = NULL;
@@ -1073,11 +1086,19 @@ fps_search_detect_window(const int      fd,
   }
 #endif
 
+#if 0
   *extra_cds_offset = (int) (sqrt(*win_var)   *  // ADC code deviation
                              1                /  // 1 sigmas
                              256 * 3.3 * 1000 /  // ADC code -> mV
                              1.5 + 0.5);           // 2mV CDS offset per step
   ALOGD("%s(): extra_cds_offset = 0x%03X\n", __func__, *extra_cds_offset);
+#else
+  *extra_cds_offset = (sqrt(*win_var)   *  // ADC code deviation
+                       1                /  // 1 sigmas
+                       256 * 3.3 * 1000 /  // ADC code -> mV
+                       1.5);               // 1.5mV CDS offset per step
+  ALOGD("extra_cds_offset = %0.3f\n", *extra_cds_offset);
+#endif
 
   if (*win_var >= 10.0) {
       ALOGD("%s(): Too bad to search a good detect window!\n", __func__);
@@ -1085,8 +1106,13 @@ fps_search_detect_window(const int      fd,
       goto fps_search_detect_window_error;
   }
 
-  ALOGD("%s(): Sel. Row (Begin/End) = %0d/%0d, Avg. = %0.3f, Var. = %0.3f, Extra CDS Offset = 0x%03X\n",
-        __func__, *row_scan_begin, *row_scan_end, *win_avg, *win_var, *extra_cds_offset);
+#if 0
+  ALOGD("Sel. Row (Begin/End) = %0d/%0d, Avg. = %0.3f, Var. = %0.3f, Extra CDS Offset = 0x%03X\n",
+        *row_scan_begin, *row_scan_end, *win_avg, *win_var, *extra_cds_offset);
+#else
+  ALOGD("Sel. Row (Begin/End) = %0d/%0d, Avg. = %0.3f, Var. = %0.3f, Extra CDS Offset = %0.3f\n",
+        *row_scan_begin, *row_scan_end, *win_avg, *win_var, *extra_cds_offset);
+#endif
 
 fps_search_detect_window_error:
 
