@@ -47,7 +47,7 @@
 //#define DOUBLE_CHECK
 //#define FPSENSOR_ERROR_ENROLLED (1105)
 
-#define VERSION "1.0.10.170426_release"
+#define VERSION "1.0.11.170504_release"
 
 extern fp_core_t fp_core;
 extern int init_sensor(int dev_fd);
@@ -141,6 +141,9 @@ int fpsensor_store_template_db(void *pHandle);
 ////////////////////////////////////////////////////////////////////////////////
 //
 // Global Variables
+//
+//add by corey
+static double img_dr = 0.0;
 //
 static uint16_t     det_cds_offset       = 0;
 static uint8_t      det_detect_th        = 0;
@@ -237,7 +240,7 @@ int dfs747_enrol(void *pHandle, void *enroll_data)
 
   //add for new algorithm
   PEXTERN_MATCH_PARA matchPara;
-  PEXTERN_REG_PARA regPara; 
+  PEXTERN_REG_PARA regPara;
   PEXTERN_PARA externPara;
   externPara.sensor_type = "F747A";
   //end
@@ -253,7 +256,13 @@ int dfs747_enrol(void *pHandle, void *enroll_data)
 #endif
 
   ALOGD("%s begin", __func__);
-
+  //add by corey 17/05/03
+  ALOGD("enroll img_dr is %0.3f",img_dr);
+  if (img_dr >60.00){
+    ALOGE("Image is more than 60.00");
+    return -FPSENSOR_ERROR_GENERAL;
+  }
+  //end
   if(tac_handle->enrolling == false)
   {
 	  ALOGE("begin enrol not call,return error");
@@ -297,10 +306,10 @@ int dfs747_enrol(void *pHandle, void *enroll_data)
         //((fpsensor_identify_result_t *)identify_data)->score = 100 * fSimilarity;
         if(fSimilarity >= MATCH_SCORE_VALUE){
 #ifdef FPSENSOR_ERROR_ENROLLED
-            return 1105;  
+            return 1105;
 #else
-	    return -FPSENSOR_ERROR_DUPLICATE; 
-#endif 
+	    return -FPSENSOR_ERROR_DUPLICATE;
+#endif
         }
      }
 #endif
@@ -398,7 +407,7 @@ int dfs747_identify(void *pHandle, const uint8_t* nonce, void *identify_data)
      return -FPSENSOR_ERROR_GENERAL;
   }
 
-  
+
   for(i=0;i<MAX_NBR_TEMPLATES;i++)
     {
         if((tac_handle->template_state[i] == 0xaa) && (tac_handle->pFeature_data[i]))
@@ -2329,7 +2338,9 @@ image_mode_test_error :
 
     // Calculate dynamic range
     fng_dr = fng_avg - bkg_avg;
-
+    //add by corey 17/05/03
+    img_dr = fng_dr ;
+    //End
     // Display DR
     ALOGD("    Image Dynamic Range = %0.3f\n", fng_dr);
 
@@ -2508,7 +2519,7 @@ int32_t dfs747_captureImage(fingerprint_data_t* device)
       status = fps_search_cds_offset(device->sysfs_fd, det_detect_th,
                                  DFS747_MAX_CDS_OFFSET, DFS747_MIN_CDS_OFFSET,
                                  det_sleep_us, scan_limit, int_enable,
-                                 &det_cds_offset);    
+                                 &det_cds_offset);
 	    if (status < 0) {
       		return status;
     	    }
@@ -2517,7 +2528,7 @@ int32_t dfs747_captureImage(fingerprint_data_t* device)
       status = fps_search_detect_threshold(device->sysfs_fd, det_cds_offset,
                                  DFS747_MAX_DETECT_TH, DFS747_MIN_DETECT_TH,
                                  det_sleep_us, scan_limit, int_enable,
-                                 &det_detect_th);    
+                                 &det_detect_th);
 	    if (status < 0) {
       		return status;
     	    }
@@ -2846,7 +2857,7 @@ int32_t dfs747_detect_finger3(fingerprint_data_t *device)
     }else if((tac_handle->enrolling == true)&&(isGetimaged == 1)){
 	get_image(device,tac_handle->pRaw_imgbuf);
     	fp_finger_detection(tac_handle, &avgValue, &imgValue);
-	ALOGD("Enrolling imgValue = %d",imgValue);	
+	ALOGD("Enrolling imgValue = %d",imgValue);
 	//isGetimaged = 0;
 	if (imgValue < 60){
 	    isGetimaged = 0;
@@ -2857,7 +2868,7 @@ int32_t dfs747_detect_finger3(fingerprint_data_t *device)
 	    ALOGD("enrolling FINGER_DETECT_AGAIN");
 	    return FINGER_DETECT_AGAIN;
 	}
-	
+
     }
 
 	/*
@@ -2898,7 +2909,7 @@ int32_t dfs747_detect_finger3(fingerprint_data_t *device)
     for (i = 0 ;i <3 ; i ++){
 	ALOGD("Check finger retry count :%d",i);
         status = fps_single_read(device->sysfs_fd, DFS747_REG_INT_EVENT, &data);
-	usleep(1*MSEC);        
+	usleep(1*MSEC);
 	if (status < 0) {
             return state = FINGER_DETECT_ERROR;
         }
@@ -2955,7 +2966,7 @@ int32_t dfs747_detect_finger3(fingerprint_data_t *device)
 	}else{
 	    state = FINGER_DETECT_PRESENT;
 	}
-  
+
 
         // Turn on interrupt
         status = fps_single_write(device->sysfs_fd, DFS747_REG_INT_CTL, DFS747_DETECT_EVENT);
@@ -3032,13 +3043,13 @@ int32_t dfs747_detect_finger3(fingerprint_data_t *device)
                 if (status < 0) {
                     return state = FINGER_DETECT_ERROR;
                 }
-           
+
                 for (scan_cnt = 0; scan_cnt < scan_limit; scan_cnt++) {
                     status = fps_scan_detect_event(device->sysfs_fd, det_detect_th, (det_cds_offset - 1), det_sleep_us, 0, 0);
                     if (status < 0) {
                         return state = FINGER_DETECT_ERROR;
                     }
-           
+
                     // Finger-on is still NOT detected, decr. CDS Offset
                     if (status == 0) {
                         if (det_cds_offset != DFS747_MIN_CDS_OFFSET) {
@@ -3050,7 +3061,7 @@ int32_t dfs747_detect_finger3(fingerprint_data_t *device)
                         break;
                     }
                 }
-           
+
                 if ((status > 0) && (scan_cnt == scan_limit)) {
                     break;
                 }
@@ -3063,13 +3074,13 @@ int32_t dfs747_detect_finger3(fingerprint_data_t *device)
                 if (status < 0) {
                     return state = FINGER_DETECT_ERROR;
                 }
-           
+
                 for (scan_cnt = 0; scan_cnt < scan_limit; scan_cnt++) {
                     status = fps_scan_detect_event(device->sysfs_fd, det_detect_th, (det_cds_offset + 1), det_sleep_us, 0, 0);
                     if (status < 0) {
                         return state = FINGER_DETECT_ERROR;
                     }
-           
+
                     // Finger-on is still detected, incr. CDS Offset
                     if (status > 0) {
                         if (det_cds_offset != DFS747_MAX_CDS_OFFSET) {
@@ -3081,7 +3092,7 @@ int32_t dfs747_detect_finger3(fingerprint_data_t *device)
                         break;
                     }
                 }
-           
+
                 if ((status == 0) && (scan_cnt == scan_limit)) {
                     break;
                 }
@@ -3127,6 +3138,7 @@ int32_t dfs747_detect_finger3(fingerprint_data_t *device)
     }
 
     // Report finger up
+
     if ((state == FINGER_DETECT_LOST) && (report_finger_down == 1)) {
         tr.opcode = DFS747_IOC_SENDKEY;
         tr.len    = 0;
@@ -3140,7 +3152,6 @@ int32_t dfs747_detect_finger3(fingerprint_data_t *device)
 
         report_finger_down = 0;
     }
-
     return state;
 }
 

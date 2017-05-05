@@ -137,7 +137,7 @@ static int fingerprint_close(hw_device_t *dev)
     fingerprint_exit(dev);
 
     fingerprint_sem_destroy(&fpData->cmd_sem);
-	
+
     fpData->sleep(fpData,1);
 	free(fpData->tac_handle);
 
@@ -188,8 +188,8 @@ static int fingerprint_cmd_wait(fingerprint_data_t *fpData,fingerprint_cmdID_t c
     gettimeofday(&ts_start, NULL);
     memset(node, 0, sizeof(fingerprint_cmd_t));
     node->cmdId= cmdId;
-    node->data= data;	
-    node->reserved_node = true;	
+    node->data= data;
+    node->reserved_node = true;
 
     if (fpData->cmd_queue->enqueue((void *)node) == true) {
         fingerprint_sem_post(&fpData->cmd_sem);
@@ -201,14 +201,14 @@ static int fingerprint_cmd_wait(fingerprint_data_t *fpData,fingerprint_cmdID_t c
         ret = node->status;
 	 if(out)
 		*out = node->data;
-	 
+
         free(node);
         node = NULL;
         gettimeofday(&ts_current, NULL);
         timersub(&ts_current, &ts_start, &ts_delta);
         delta_us = TIME_IN_US(ts_delta);
         ALOGD("KPI do cmdId %d : %d ms",cmdId, delta_us / 1000);
-        return ret; 
+        return ret;
     } else {
         free(node);
 		node = NULL;
@@ -245,7 +245,7 @@ static uint64_t fingerprint_get_auth_id(struct fingerprint_device *device)
 }
 
 static int fingerprint_set_active_group(struct fingerprint_device *dev, uint32_t gid,
-        const char *path) 
+        const char *path)
 {
     fingerprint_data_t *fpData  = (fingerprint_data_t *)dev;
     int ret = 0;
@@ -263,14 +263,14 @@ static int fingerprint_set_active_group(struct fingerprint_device *dev, uint32_t
     }
 
     gettimeofday(&ts_start, NULL);
-    
+
     memset(node, 0, sizeof(fingerprint_cmd_t));
 
     node->cmdId= FINGERPRINT_CMD_SET_ACTIVE_GRP;
     node->data = (uint64_t)gid;
     node->buf = (char *)path;
     node->reserved_node = true;
-	
+
     if (fpData->cmd_queue->enqueue((void *)node) == true) {
         fingerprint_sem_post(&fpData->cmd_sem);
         ret = fingerprint_sem_wait(&fpData->sync_sem);
@@ -312,13 +312,13 @@ static int fingerprint_calibrate(struct fingerprint_device *dev, const char *sto
     }
 
     gettimeofday(&ts_start, NULL);
-    
+
     memset(node, 0, sizeof(fingerprint_cmd_t));
 
     node->cmdId= FINGERPRINT_CMD_CALIBRATE;
     node->buf = (char *)store_path;
     node->reserved_node = true;
-	
+
     if (fpData->cmd_queue->enqueue((void *)node) == true) {
         fingerprint_sem_post(&fpData->cmd_sem);
         ret = fingerprint_sem_wait(&fpData->sync_sem);
@@ -344,7 +344,7 @@ static int fingerprint_calibrate(struct fingerprint_device *dev, const char *sto
 }
 
 static int fingerprint_enroll(struct fingerprint_device *device,
-        const hw_auth_token_t *hat, uint32_t gid, uint32_t timeout_sec) 
+        const hw_auth_token_t *hat, uint32_t gid, uint32_t timeout_sec)
 {
     ALOGD("fingerprint_enroll");
     fingerprint_data_t* dev = (fingerprint_data_t*) device;
@@ -373,7 +373,7 @@ static int fingerprint_enroll(struct fingerprint_device *device,
         free(node);
 		node = NULL;
         return FINGERPRINT_ERROR;
-    }	
+    }
     return 0;
 
 }
@@ -392,13 +392,13 @@ static int fingerprint_authenticate(struct fingerprint_device *device,
     int rc = 0;
     unsigned int i = 0;
     unsigned int j = 0;
-	
+
     if (!device->notify) {
         ALOGE("%s failed notify not set\n", __func__);
         rc = -1;
         return -1;
     }
-		
+
     fingerprint_cmd_t *node = (fingerprint_cmd_t *)malloc(sizeof(fingerprint_cmd_t));
     if (NULL == node) {
         ALOGE("%s: No memory for fingerprint_cmd_t", __func__);
@@ -424,7 +424,7 @@ err:
 
 
 static int fingerprint_remove(struct fingerprint_device __unused *dev,
-        uint32_t __unused gid, uint32_t __unused fid) 
+        uint32_t __unused gid, uint32_t __unused fid)
 {
     // TODO: implement enroll and remove, and set dev->authenticator_id = 0 when no FPs enrolled
 
@@ -444,7 +444,7 @@ static int fingerprint_remove(struct fingerprint_device __unused *dev,
     node->data= (uint64_t)fid;
     if (fpData->cmd_queue->enqueue((void *)node) == true) {
             fingerprint_sem_post(&fpData->cmd_sem);
-	    //ALOGD("Cancel called by corey");	
+	    //ALOGD("Cancel called by corey");
 	    //fingerprint_cancel(dev);
             return NO_ERROR;
     } else {
@@ -460,7 +460,7 @@ static int fingerprint_remove(struct fingerprint_device __unused *dev,
 
 
 static int fingerprint_enumerate(struct fingerprint_device *device,
-        fingerprint_finger_id_t *results, uint32_t *max_size) 
+        fingerprint_finger_id_t *results, uint32_t *max_size)
 {
     fingerprint_data_t *fpData  = (fingerprint_data_t *)device;
     int ret = 0;
@@ -478,9 +478,9 @@ static int fingerprint_enumerate(struct fingerprint_device *device,
     gettimeofday(&ts_start, NULL);
     memset(node, 0, sizeof(fingerprint_cmd_t));
     node->cmdId= FINGERPRINT_CMD_ENUMERATE;
-    node->len= *max_size;	
-    node->buf= (char *)results;	
-    node->reserved_node = true;	
+    node->len= *max_size;
+    node->buf= (char *)results;
+    node->reserved_node = true;
 
     if (fpData->cmd_queue->enqueue((void *)node) == true) {
         fingerprint_sem_post(&fpData->cmd_sem);
@@ -491,14 +491,14 @@ static int fingerprint_enumerate(struct fingerprint_device *device,
         }
         ret = node->status;
 	    *max_size = node->len;
-	 
+
         free(node);
         node = NULL;
         gettimeofday(&ts_current, NULL);
         timersub(&ts_current, &ts_start, &ts_delta);
         delta_us = TIME_IN_US(ts_delta);
         ALOGD("KPI do enum : %d ms", delta_us / 1000);
-        return ret; 
+        return ret;
     } else {
         free(node);
 		node = NULL;
@@ -507,7 +507,7 @@ static int fingerprint_enumerate(struct fingerprint_device *device,
 }
 
 static int fingerprint_do_enumerate(struct fingerprint_device *device,
-        fingerprint_finger_id_t *results, uint32_t *max_size) 
+        fingerprint_finger_id_t *results, uint32_t *max_size)
 {
     ALOGD("%s", __func__);
     fingerprint_data_t *fpData  = (fingerprint_data_t *)device;
@@ -529,7 +529,7 @@ static int fingerprint_do_enumerate(struct fingerprint_device *device,
         }
     }
     *max_size = size;
-    
+
     ALOGD("%s template_count %u\n", __func__, size);
 
     return 0;
@@ -576,7 +576,7 @@ static int fingerprint_do_remove(fingerprint_device_t *device,uint32_t gid, uint
     }
 
     for (uint32_t i = 1; i <= MAX_NBR_TEMPLATES; i++) {
-	
+
        // if (fid == 0 || fid == i) {
 	if (fid == 0 || fid == i) {
             if (fpData->delete_template(fpData->tac_handle, i)) {
@@ -584,23 +584,23 @@ static int fingerprint_do_remove(fingerprint_device_t *device,uint32_t gid, uint
                 goto out;
             }
 			ALOGD("notify removed fid=%d gid=%d", fid, fpData->current_gid);
-			
+
 			msg.type = FINGERPRINT_TEMPLATE_REMOVED;
 			msg.data.removed.finger.fid = i;
 			msg.data.removed.finger.gid = fpData->current_gid;
 			device->notify(&msg);
-			/*if(fid != 0 ){			
-			ALOGD("Cancel called by corey");	
-	    		fingerprint_cancel(device);				
+			/*if(fid != 0 ){
+			ALOGD("Cancel called by corey");
+	    		fingerprint_cancel(device);
 			}
 			*/
             found = 1;
         }
     }
-    
-    ALOGD("Cancel called by corey");	
+
+    ALOGD("Cancel called by corey");
     fingerprint_cancel(device);
-       
+
     if (!found && fid != 0) {
         // Fingerprint not found in the database, notify it was already removed by sending
         // FINGERPRINT_TEMPLATE_REMOVED.
@@ -626,10 +626,10 @@ out:
 }
 
 
-int fingerprint_enroll_init(fingerprint_data_t *fpData, const hw_auth_token_t *hat, uint32_t  gid,uint32_t  timeout_sec) 
+int fingerprint_enroll_init(fingerprint_data_t *fpData, const hw_auth_token_t *hat, uint32_t  gid,uint32_t  timeout_sec)
 {
     fingerprint_device_t *device = (fingerprint_device_t *)fpData;
-  
+
 
     fingerprint_msg_t msg;
     int ret = 0;
@@ -641,7 +641,7 @@ int fingerprint_enroll_init(fingerprint_data_t *fpData, const hw_auth_token_t *h
         ALOGD("%s image mode not enable,can't enroll\n", __func__);
         status = -EPERM;
         goto out;
-    }	
+    }
 
     status = fpData->begin_enroll(fpData->tac_handle);
     if (status != FPSENSOR_ERROR_OK) {
@@ -649,7 +649,7 @@ int fingerprint_enroll_init(fingerprint_data_t *fpData, const hw_auth_token_t *h
         goto out;
     }
 
-	
+
     gettimeofday(&fpData->enrol_timeout, NULL);
     fpData->finger_state = FINGERPRINT_STATE_ENROLLING;
     fpData->enroll_remaining = 10;
@@ -659,17 +659,17 @@ int fingerprint_enroll_init(fingerprint_data_t *fpData, const hw_auth_token_t *h
     }else{
         fpData->enrol_timeout.tv_sec  += DEFATULT_TIMEOUT;
     }
-    
+
     if(fpData->state_notified == 0) {
 		msg.type = FINGERPRINT_ACQUIRED;
 		msg.data.acquired.acquired_info = FINGERPRINT_ACQUIRED_WAIT_FINGERDOWN;
-		device->notify(&msg);	
+		device->notify(&msg);
 	}
     if(fpData->finger_press_state == FINGERPRINT_WAIT_FINGERUP)
         fpData->finger_press_state = FINGERPRINT_WAIT_FINGERDOWN;
 	fpData->sleep(fpData,!fpData->touch_mode);
     return 0;
-	
+
 out:
     switch (status) {
     case 0:
@@ -761,12 +761,12 @@ int fingerprint_idle(fingerprint_data_t *fpData)
 
     ALOGD( "FP_STATE: change from FINGERPRINT_UP --> FINGERPRINT_IDLE");
     fpData->finger_press_state = FINGERPRINT_IDLE;
-	
+
 	if(fpData->update_pending == true) {
 		fpData->update_pending = false;
 		fpData->store_template_db(fpData->tac_handle);
 	}
-	
+
     set_wakelock_state(fpData, false);
 //	if(fpData->fb_blank != FB_BLANK_FP_BLANK) {
 //		fpData->fb_blank = FB_BLANK_FP_BLANK;
@@ -785,8 +785,8 @@ int fingerprint_recovery(fingerprint_data_t *fpData)
     	ALOGE("try to recovery fingerprintTA too many times,do exit");
 		fingerprint_cmd(fpData,fpData->evt_queue,FINGERPRINT_EVT_DISABLE_SENSOR);
 		return -1;
-    }	
-		
+    }
+
     fpData->sensor_deinit(fpData);
     fpData->sensor_init(fpData);
     ret = fpData->sleep(fpData,!fpData->touch_mode);
@@ -818,7 +818,7 @@ int fingerprint_do_detect(fingerprint_data_t *fpData)
 	}
 
     status = (finger_detect_type)fpData->check_finger_present(fpData);
-		
+
 	ALOGE("fingerprint detect status %d",status);
     if(status == FINGER_DETECT_ERROR)
     {
@@ -826,7 +826,7 @@ int fingerprint_do_detect(fingerprint_data_t *fpData)
         fingerprint_recovery(fpData);
         return -1;
     }
-	
+
     // check whether enrol timeout?
 	if(fpData->finger_state == FINGERPRINT_STATE_ENROLLING){
         rc = gettimeofday(&tv, NULL);
@@ -909,7 +909,7 @@ int fingerprint_do_capture(fingerprint_data_t *fpData)
         fpData->finger_press_state = FINGERPRINT_WAIT_FINGERDOWN;
 	 msg.type = FINGERPRINT_ACQUIRED;
         msg.data.acquired.acquired_info = FINGERPRINT_ACQUIRED_TOO_FAST;
-        device->notify(&msg);	
+        device->notify(&msg);
         fingerprint_cmd(fpData,fpData->evt_queue,FINGERPRINT_EVT_FINGER_DETECT);
         return -EAGAIN;
     } else if (ret) {
@@ -918,8 +918,8 @@ int fingerprint_do_capture(fingerprint_data_t *fpData)
         fingerprint_cmd(fpData,fpData->evt_queue,FINGERPRINT_EVT_FINGER_DETECT);
         return -EIO;
     }else if (ret == -1){
-	// add by corey for error interrupt	 
-	return -EAGAIN; 
+	// add by corey for error interrupt
+	return -EAGAIN;
     }
 
 #ifdef DEBUG_FINGERPRINT
@@ -933,7 +933,7 @@ int fingerprint_do_capture(fingerprint_data_t *fpData)
 		fpData->state_notified = 2;
 		msg.type = FINGERPRINT_ACQUIRED;
 		msg.data.acquired.acquired_info = FINGERPRINT_ACQUIRED_WAIT_FINGERUP;
-		device->notify(&msg);	
+		device->notify(&msg);
 	}
     if(fpData->finger_state == FINGERPRINT_STATE_VERIFYING) {
         ALOGD( "goto verify");
@@ -978,7 +978,9 @@ int fingerprint_do_enroll(fingerprint_data_t *fpData)
     }
     else if(ret) {
         ALOGD("enroll failed,goto detect");
-        return 0;
+        //modified by corey 17/05/03
+        //return 0;
+        return ret;
     }
 
     fpData->enroll_remaining--;
@@ -1025,20 +1027,20 @@ int fingerprint_begin_verify(fingerprint_device_t *device,uint64_t operation_id,
         msg.data.error = FINGERPRINT_ERROR_NOT_ENABLED;
         status = -EPERM;
         goto out;
-    }	
+    }
 
     if (gid != fpData->current_gid) {
         ALOGD("%s finger.gid != current_gid\n", __func__);
         msg.data.error = FINGERPRINT_ERROR_HW_UNAVAILABLE;
         status = -EINTR;
 		goto out;
-    }	
+    }
 
 	fpData->finger_state = FINGERPRINT_STATE_VERIFYING;
     if(fpData->state_notified == 0) {
 		msg.type = FINGERPRINT_ACQUIRED;
 		msg.data.acquired.acquired_info = FINGERPRINT_ACQUIRED_WAIT_FINGERDOWN;
-		device->notify(&msg);	
+		device->notify(&msg);
 	}
     if(fpData->finger_press_state == FINGERPRINT_WAIT_FINGERUP)
         fpData->finger_press_state = FINGERPRINT_WAIT_FINGERDOWN;
@@ -1147,7 +1149,7 @@ int fingerprint_handle_poll_result(fingerprint_data_t *fpData,uint32_t timeout)
     }else if(timeout > 0) {//timeout
         gettimeofday(&tv, NULL);
         //for enrol timeout
-	
+
         if(fpData->finger_state == FINGERPRINT_STATE_ENROLLING){
             timersub(&fpData->enrol_timeout, &tv, &ts_delta);
             delta_us = TIME_IN_US(ts_delta);
@@ -1159,7 +1161,7 @@ int fingerprint_handle_poll_result(fingerprint_data_t *fpData,uint32_t timeout)
                 ALOGD("enrol timeout!at poll");
             }
         }
-	
+
         //for autosuspend
         if(fpData->finger_press_state != FINGERPRINT_IDLE) {
             timersub(&fpData->idle_timeout, &tv, &ts_delta);
@@ -1214,7 +1216,7 @@ static void* poll_thread(void *data)
             if(delta_us>0) {
                 timeout = delta_us/1000;
                 ALOGD("wait %d ms for enrol timeout",timeout);
-            } else 
+            } else
 				timeout = 1;
         }else if(fpData->finger_press_state != FINGERPRINT_IDLE) {
             timersub(&fpData->idle_timeout, &tv, &ts_delta);
@@ -1222,7 +1224,7 @@ static void* poll_thread(void *data)
             if(delta_us > 0) {
                 timeout = delta_us/1000;
                 ALOGD("wait %d ms for idle timeout",timeout);
-			} else 
+			} else
 				timeout = 1;
         }
 
@@ -1242,7 +1244,7 @@ static void* poll_thread(void *data)
         } else {
             ALOGD("Unkown events = 0x%x\n", pfd.revents);
         }
-		
+
 #ifdef DEBUG_FINGERPRINT
         if(fpData->simulate_enabled == true) {
             random = rand();
@@ -1252,7 +1254,7 @@ static void* poll_thread(void *data)
                 poll_val = 0;
             }
         }
-#endif		
+#endif
 
         if(poll_val >= 0) {
             node = (fingerprint_cmd_t *)malloc(sizeof(fingerprint_cmd_t));
@@ -1453,7 +1455,7 @@ void *cmd_thread(void *data)
 		if(fpData->disable_sensor == true) {
 		    ALOGD("fingerprint sensor error,can't setmode");
 		    break;
-		}			
+		}
 		if((uint32_t)node->data ==	IMAGE_MODE) {
 			if(node->len  ==(uint32_t)fpData->image_mode) {
 				ALOGD("fingerprint already %s",fpData->image_mode == 1?"enabled":"disabled");
@@ -1497,10 +1499,10 @@ void *cmd_thread(void *data)
 	//		ret = ioctl(fpData->sysfs_fd,FPSENSOR_IOC_MASK_INTERRUPT,&ret);
 	//	}
             break;
-			
-	 case FINGERPRINT_CMD_PRE_ENROL:			
+
+	 case FINGERPRINT_CMD_PRE_ENROL:
             ALOGD("cmd_thread:handle FINGERPRINT_CMD_PRE_ENROL");
-		    // ret = fpData->get_hw_auth_challenge(fpData->tac_handle, &node->data);	
+		    // ret = fpData->get_hw_auth_challenge(fpData->tac_handle, &node->data);
 			//if (ret) {
 		    //    ALOGE("%s failed %i\n", __func__, ret);
 		    //    node->data = 0;
@@ -1509,11 +1511,11 @@ void *cmd_thread(void *data)
 		    ALOGD("FINGERPRINT_CMD_PRE_ENROL challenge %llu\n", node->data);
 			fingerprint_sem_post(&fpData->sync_sem);
 		break;
-		
-	 case FINGERPRINT_CMD_POST_ENROL:	
+
+	 case FINGERPRINT_CMD_POST_ENROL:
             ALOGD("cmd_thread:handle FINGERPRINT_CMD_POST_ENROL");
 
-		    //ret = fpData->get_hw_auth_challenge(fpData->tac_handle, &node->data);	
+		    //ret = fpData->get_hw_auth_challenge(fpData->tac_handle, &node->data);
 		    //if (ret) {
 		    //    ALOGE("%s failed %i\n", __func__, ret);
 		    //    node->data = -1;
@@ -1521,8 +1523,8 @@ void *cmd_thread(void *data)
             node->data = get_64bit_rand();
 		    ALOGD("FINGERPRINT_CMD_POST_ENROL challenge %llu",node->data);
 			fingerprint_sem_post(&fpData->sync_sem);
-		break;	
-		
+		break;
+
 	case FINGERPRINT_CMD_GET_AUTH_ID:
 		ALOGD("cmd_thread:handle FINGERPRINT_CMD_GET_AUTH_ID");
 		    //ret = fpData->get_template_db_id(fpData->tac_handle, &node->data);
@@ -1534,7 +1536,7 @@ void *cmd_thread(void *data)
 		    ALOGD("FINGERPRINT_CMD_GET_AUTH_ID id %d", node->data);
 			fingerprint_sem_post(&fpData->sync_sem);
 		break;
-		
+
 	case FINGERPRINT_CMD_SET_ACTIVE_GRP:{
 			ALOGD("cmd_thread:handle FINGERPRINT_CMD_SET_ACTIVE_GRP");
 		    char filename[PATH_MAX];
@@ -1550,16 +1552,16 @@ void *cmd_thread(void *data)
 		   // ret = fpData->set_active_fingerprint_set(fpData->tac_handle, (int32_t)node->data);
 		   // if (ret) {
 		   //     ALOGE("%s failed %i\n", __func__, ret);
-		   //     node->data = -1;		    
+		   //     node->data = -1;
 		   //  }
-           // else 
+           // else
              {
 		   	 fpData->current_gid = node->data;
 			 node->data = 0;
 		     }
 			fingerprint_sem_post(&fpData->sync_sem);
 		}break;
-		
+
     case  FINGERPRINT_CMD_CALIBRATE:{
 			ALOGD("cmd_thread:handle FINGERPRINT_CMD_CALIBRATE");
 		    ret = fpData->calibrate(fpData, node->buf);
@@ -1569,7 +1571,7 @@ void *cmd_thread(void *data)
             node->status = ret;
 			fingerprint_sem_post(&fpData->sync_sem);
 		}break;
-    
+
     case FINGERPRINT_CMD_ENUMERATE:
 			ALOGD("cmd_thread:handle FINGERPRINT_CMD_ENUMERATE");
 			node->status = fingerprint_do_enumerate(device,(fingerprint_finger_id_t *)node->buf,&node->len);
@@ -1591,7 +1593,7 @@ void *cmd_thread(void *data)
 	     }else  if(fpData->finger_state == FINGERPRINT_STATE_VERIFYING) {
 	            ALOGD("cmd_thread:handle FINGERPRINT_CMD_CANCELVERIFY");
 	            fpData->finger_state = FINGERPRINT_STATE_LISTENING;
-		    //add by corey 
+		    //add by corey
                     fingerprint_msg_t msg;
 		    msg.type = FINGERPRINT_ERROR;
 		    msg.data.error=FINGERPRINT_ERROR_CANCELED;
@@ -1599,7 +1601,7 @@ void *cmd_thread(void *data)
 		    //end
 	            //(void) fpData->end_verify(fpData->tac_handle);
 		}else{
-		    //add by corey 
+		    //add by corey
 		    fpData->finger_state = FINGERPRINT_STATE_IDLE;
                     fingerprint_msg_t msg;
 		    msg.type = FINGERPRINT_ERROR;
@@ -1611,7 +1613,7 @@ void *cmd_thread(void *data)
 
         case FINGERPRINT_CMD_REMOVE:
             ALOGD("cmd_thread:handle FINGERPRINT_CMD_REMOVE");
-		fingerprint_do_remove(device,node->len, (uint32_t)node->data);			
+		fingerprint_do_remove(device,node->len, (uint32_t)node->data);
 		//	if(fpData->update_pending && fpData->finger_press_state == FINGERPRINT_IDLE) {
 			//	fpData->update_pending = false;
 				//fpData->update_templates(fpData);
@@ -1644,6 +1646,8 @@ void *cmd_thread(void *data)
         case FINGERPRINT_EVT_FINGER_DETECT:
             //ALOGE("cmd_thread:handle FINGERPRINT_EVT_FINGER_DETECT");
             ret = fingerprint_do_detect(fpData);
+            //test 17/05/04
+            set_wakelock_state(fpData, false);
             break;
 
         case FINGERPRINT_EVT_CAPTURE:
@@ -1657,7 +1661,17 @@ void *cmd_thread(void *data)
 
         case FINGERPRINT_EVT_ENROL:
             //ALOGE("cmd_thread:handle FINGERPRINT_EVT_ENROL");
-            fingerprint_do_enroll(fpData);
+            ret = fingerprint_do_enroll(fpData);
+            //add by corey 17/05/03
+            if (ret<0){
+            fpData->finger_state = FINGERPRINT_STATE_LISTENING;
+            fingerprint_msg_t msg;
+            msg.type = FINGERPRINT_ERROR;
+            msg.data.error=FINGERPRINT_ERROR_HW_UNAVAILABLE;
+            device->notify(&msg);
+            }
+            //end
+
             fingerprint_cmd(fpData,fpData->evt_queue,FINGERPRINT_EVT_FINGER_DETECT);
             break;
 
@@ -1672,7 +1686,7 @@ void *cmd_thread(void *data)
 		fpData->touch_mode = 0;
 		fpData->image_mode = 0;
 		break;
-		
+
         case FINGERPRINT_CMD_EXIT:
             ALOGE("cmd_thread:handle FINGERPRINT_CMD_EXIT");
             fingerprint_idle(fpData);
@@ -1686,7 +1700,7 @@ void *cmd_thread(void *data)
                 device->notify = NULL;
             }
             break;
-			
+
         default:
             ALOGE("Unkown cmd");
         }
@@ -1726,7 +1740,7 @@ static int fingerprint_open(const hw_module_t* module, const char __unused *id,
 
     dev->pre_enroll = fingerprint_pre_enroll;
     dev->enroll = fingerprint_enroll;
-    dev->post_enroll = fingerprint_post_enroll;	
+    dev->post_enroll = fingerprint_post_enroll;
     dev->get_authenticator_id = fingerprint_get_auth_id;
     dev->set_active_group = fingerprint_set_active_group;
     dev->calibrate = fingerprint_calibrate;
@@ -1736,7 +1750,7 @@ static int fingerprint_open(const hw_module_t* module, const char __unused *id,
     dev->remove = fingerprint_remove;
     dev->set_notify = set_notify_callback;
     dev->notify = NULL;
-	
+
 	fpData->sysfs_fd = open(FINGERPRINT_SENSOR_PATH, O_RDWR);
 		if(fpData->sysfs_fd<0)
 		{
@@ -1744,13 +1758,13 @@ static int fingerprint_open(const hw_module_t* module, const char __unused *id,
 			ret	= property_set("persist.yulong.fpModuleName", "No Sensor");
 			return -ENODEV;
 		}
-		
+
 	//	rc = ioctl(device->sysfs_fd,FPSENSOR_IOC_GET_MODULE_NAME,property);
 	//	if(rc < 0)
 	//	{
 	//		ALOGE("Failed to read fingerprint module's name in %s func with error %d: %s\n",__func__,errno,strerror(errno));
 	//	}
-		
+
 
     dfs747_device_init(fpData);
 
@@ -1760,9 +1774,9 @@ static int fingerprint_open(const hw_module_t* module, const char __unused *id,
         ALOGE("fingerprint_sensor_init fail,check fpc lib or memory");
      	 ret = -1;
         goto err_probe_sensor;
-    }	
+    }
 
-				
+
     fpData->cmd_queue = new fingerprintQueue();
     fpData->evt_queue = new fingerprintQueue();
     fingerprint_sem_init(&fpData->cmd_sem, 0);
@@ -1828,7 +1842,7 @@ static int fingerprint_open(const hw_module_t* module, const char __unused *id,
 	fingerprint_cmd(fpData,fpData->evt_queue,FINGERPRINT_EVT_INIT);
 
     return 0;
-   
+
 err_probe_sensor:
     ALOGE("err_probe_sensor: %d\n", ret);
 	free(fpData->tac_handle);
