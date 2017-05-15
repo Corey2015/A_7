@@ -47,7 +47,7 @@
 //#define DOUBLE_CHECK
 //#define FPSENSOR_ERROR_ENROLLED (1105)
 
-#define VERSION "1.0.12.170511_Release"
+#define VERSION "1.0.13.170513_Release"
 
 extern fp_core_t fp_core;
 extern int init_sensor(int dev_fd);
@@ -2746,11 +2746,12 @@ int32_t dfs747_calibrate(fingerprint_data_t* device,const char *store_path)
 	fpsensor_handle_internal_t* tac_handle = (fpsensor_handle_internal_t*) device->tac_handle;
 
 	int32_t status;
+	int i;
     	//int mode_old;
 
 	//init_sensor(device->sysfs_fd);
 	ALOGD("store_path %s",store_path);
-
+    /*
     status = calibrate_image(device->sysfs_fd,&tac_handle->dfs_cal);
     if(status)
         ALOGE("calibrate_image fail.");
@@ -2762,7 +2763,30 @@ int32_t dfs747_calibrate(fingerprint_data_t* device,const char *store_path)
     write_calibration_data(store_path,(unsigned char *)&tac_handle->dfs_cal,sizeof(tac_handle->dfs_cal));
     ALOGD("detect cds_offset:0x%x  thrshld:0x%x",tac_handle->dfs_cal.detect_cds_offset,tac_handle->dfs_cal.detect_thrshld);
     ALOGD("img cds_offset:0x%x  thrshld:0x%x",tac_handle->dfs_cal.img_cds_offset,tac_handle->dfs_cal.img_thrshld);
+    */
+      status = calibrate_image(device->sysfs_fd,&tac_handle->dfs_cal);
+      usleep(100 * MSEC);
+      for (i = 0; i < 5; i++) {
+          status = calibrate_image(device->sysfs_fd,&tac_handle->dfs_cal);
+          usleep(100 * MSEC);
+          if (status == 0) {
+              ALOGI("Image Calibration Success!\n");
+              break;
+          }
+	  init_sensor(device->sysfs_fd);
+          usleep(100 * MSEC);
+      }
 
+      status = calibrate_detect(device->sysfs_fd,&tac_handle->dfs_cal);
+      usleep(100 * MSEC);
+      for (i = 0; i < 5; i++) {
+          status = calibrate_detect(device->sysfs_fd,&tac_handle->dfs_cal);
+          usleep(100 * MSEC);
+          if (status == 0) {
+              ALOGI("Detect Calibration Success!\n");
+              break;
+          }
+      }
 	return status;
 }
 
@@ -2954,19 +2978,19 @@ int32_t dfs747_detect_finger3(fingerprint_data_t *device)
     if (status < 0) {
         return state = FINGER_DETECT_ERROR;
     }
-
+/*
     if (data & DFS747_DETECT_EVENT) {
         detect_count++;
     } else {
         detect_count = 0;
     }
-
+*/
     if (state == FINGER_DETECT_ERROR) {
         state = FINGER_DETECT_LOST;
     }
 
 #if 1
-    if (detect_count == 0) {
+    if (1) {
 	    // add by corey
 	    get_image(device,tac_handle->pRaw_imgbuf);
     	fp_finger_detection(tac_handle, &avgValue, &imgValue);
@@ -3360,14 +3384,14 @@ int fpsensor_load_user_db(fingerprint_data_t* device, const char* path, uint32_t
    tac_handle->path_len = path_len;
 
    //retval = read_calibration_data(tac_handle->user_tpl_storage_path,(unsigned char *)&tac_handle->dfs_cal,sizeof(tac_handle->dfs_cal));
-	if(retval)	{
-		ALOGD("read %s fail,do calibration",tac_handle->user_tpl_storage_path);
-      retval = calibrate_image(device->sysfs_fd,&tac_handle->dfs_cal);
-      retval = calibrate_detect(device->sysfs_fd,&tac_handle->dfs_cal);
-      write_calibration_data(tac_handle->user_tpl_storage_path,(unsigned char *)&tac_handle->dfs_cal,sizeof(tac_handle->dfs_cal));
-	}
-	else
-	{
+	//if(retval)	{
+	//	ALOGD("read %s fail,do calibration",tac_handle->user_tpl_storage_path);
+      //retval = calibrate_image(device->sysfs_fd,&tac_handle->dfs_cal);
+      //retval = calibrate_detect(device->sysfs_fd,&tac_handle->dfs_cal);
+      //write_calibration_data(tac_handle->user_tpl_storage_path,(unsigned char *)&tac_handle->dfs_cal,sizeof(tac_handle->dfs_cal));
+	//}
+	//else
+	//{
 #if 0
 	  //ALOGD("read %s success,do setup calibration",tac_handle->user_tpl_storage_path);
       //retval = setup_calibrate_regs(device->sysfs_fd,tac_handle->dfs_cal);
@@ -3392,6 +3416,8 @@ int fpsensor_load_user_db(fingerprint_data_t* device, const char* path, uint32_t
               ALOGI("Image Calibration Success!\n");
               break;
           }
+	  init_sensor(device->sysfs_fd);
+          usleep(100 * MSEC);
       }
 
       retval = calibrate_detect(device->sysfs_fd,&tac_handle->dfs_cal);
@@ -3403,7 +3429,7 @@ int fpsensor_load_user_db(fingerprint_data_t* device, const char* path, uint32_t
               ALOGI("Detect Calibration Success!\n");
               break;
           }
-      }
+      //}
 #endif
     }
     ALOGD("detect cds_offset:0x%x  thrshld:0x%x",tac_handle->dfs_cal.detect_cds_offset,tac_handle->dfs_cal.detect_thrshld);
